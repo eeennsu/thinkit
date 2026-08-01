@@ -50,9 +50,15 @@ Read the actual files before judging. A finding with no quoted line is a guess.
 ## Planted files
 
 `check.mjs` reports the state of anything this plugin planted: `current`,
-`outdated`, `edited-locally`, `missing`. Offer to regenerate an outdated file.
-Never overwrite one that was edited locally — surface the difference and let
-the owner merge.
+`outdated`, `edited-locally`, `missing`, `unreadable`. Offer to regenerate an
+outdated file. Never overwrite one that was edited locally — surface the
+difference and let the owner merge.
+
+`outdated` is a verdict only the plugin copy can reach. It compares the target's
+recorded plant version against what the plugin would write today, and a planted
+copy has no canonical content to compare with; invoked on its own it reports
+`current` and says that staleness was not checkable from there. Do not read that
+as an up-to-date harness — run the plugin's own `check.mjs` for that answer.
 
 ## With --fix
 
@@ -61,8 +67,12 @@ Three remedies, all additive:
 | Repaired | Not repaired |
 | --- | --- |
 | a missing `## Gotchas` heading, left empty | its contents — a guessed gotcha is worse than none |
-| an unregistered `harness:check` script | any other script |
-| a planted file that is `outdated` or `missing` | one that is `edited-locally` |
+| an unregistered `harness:check` script, on a repo that has the checker | the same script on a repo with nothing planted: it would name a file that is not there |
+| a planted file that is `outdated` or `missing` | one that is `edited-locally`, or a manifest that is `unreadable` |
+
+`package.json` keeps its own indentation and trailing-newline state through the
+repair. It is the repo's file; a one-key edit that reformats the whole thing
+puts every line of it in someone's diff.
 
 Prose is never rewritten. Deleting a sentence from someone's CLAUDE.md is their
 call, and the report gives them what they need to make it.

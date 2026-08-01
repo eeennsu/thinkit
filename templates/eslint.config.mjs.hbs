@@ -1,30 +1,47 @@
-// Generated from modules/fsd/layers.json. Do not hand-edit the boundaries block:
-// the layer graph has one owner, and edits here are invisible to it.
-// Regenerate with:  /harness-bootstrap {{stack}}
-import boundaries from 'eslint-plugin-boundaries';
+// Entry config. This file is yours: add plugins, rules and overrides here.
+//
+// A re-bootstrap refreshes it only while it is still byte-identical to what was
+// written; once you edit it, it is left alone. The boundary policies regenerate
+// either way, because they live in eslint.config.boundaries.mjs and this file
+// only spreads them in. That split exists so that adding one rule of your own
+// does not freeze the layer graph.
+import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
+import boundaries from './eslint.config.boundaries.mjs';
 
 export default [
+  // Parser and plugin registration, no rules of its own. Without it eslint reads
+  // .ts/.tsx with the default parser and dies on the first type annotation - and
+  // the boundaries block below claims to cover ts and tsx.
+  // A single config object, unlike `configs.recommended`, which is an array.
+  tseslint.configs.base,
+  ...boundaries,
   {
     files: ['**/*.{ts,tsx,js,jsx}'],
-    plugins: { boundaries },
-    settings: {
-      'boundaries/elements': {{elementsJson}},
-      'import/resolver': {{resolverJson}},
-    },
+    plugins: { 'react-hooks': reactHooks },
+    // Named one at a time rather than pulled in through a shared `recommended`.
+    // A preset grows on a minor bump, and rules nobody here agreed to are rules
+    // somebody turns off in a hurry - taking the ones that were working with them.
     rules: {
-      'boundaries/dependencies': [
-        '{{severity}}',
+      // Correctness, not taste. A hook called conditionally and a stale dependency
+      // array are both bugs that read as working code.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+      // Debug output outlives the reason it was added. Warn rather than error:
+      // a script or a CLI entry point has a legitimate use for it.
+      'no-console': 'warn',
+      // `_` is the escape hatch, and it is the reason this is configured at all.
+      // Without one, a required-but-unused callback argument has nowhere to go
+      // and the rule gets argued with instead of obeyed.
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
         {
-          default: 'disallow',
-          // Order is fixed for a stable diff. Every entry below is an allow, so
-          // order does not change the outcome today; a disallow added later must
-          // come last, because the last matching policy wins.
-          policies: {{policiesJson}},
+          args: 'after-used',
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
         },
       ],
-      // Turned on so an unresolved alias fails loudly instead of silently
-      // passing every boundary check.
-      'boundaries/no-unknown-dependencies': '{{severity}}',
     },
   },
 ];

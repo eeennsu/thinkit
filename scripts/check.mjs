@@ -34,6 +34,37 @@ const here = dirname(fileURLToPath(import.meta.url));
 const isPlantedCopy = existsSync(join(here, "rules.principles.json"));
 const pluginRoot = isPlantedCopy ? null : join(here, "..");
 
+// An unrecognised mode used to run: `principles` was checked by name and
+// anything else fell through to the calibrated branch, where a null calibration
+// skipped every rule that was not machine-decidable and principle-axis. A typo
+// in --mode produced a short, clean report of a check that had mostly not run.
+const MODES = ["principles", "full"];
+if (!MODES.includes(mode)) {
+  console.error(`--mode ${mode}: unknown. Use one of ${MODES.join(", ")}.`);
+  process.exit(2);
+}
+
+// The default mode is `full`, and a planted copy carries neither the calibrated
+// rules nor lib/calibration.mjs to resolve them against. Running it that way
+// died with ERR_MODULE_NOT_FOUND -- a stack trace for what is a usage error, on
+// the copy most likely to be invoked by hand.
+if (isPlantedCopy && mode !== "principles") {
+  console.error(`--mode ${mode}: this is the planted copy, which carries only the generation-independent rules.`);
+  console.error("Run it as --mode principles, or run the plugin's own scripts/check.mjs for --mode full.");
+  process.exit(2);
+}
+
+// Repo files that are not ours. A malformed one is a finding about the repo,
+// not a crash in the checker: exiting on a stack trace tells the owner nothing
+// about the other twelve rules, which were all still checkable.
+function parseJson(raw, label) {
+  try {
+    return { ok: true, value: JSON.parse(raw) };
+  } catch (e) {
+    return { ok: false, error: `${label} is not valid JSON: ${e.message}` };
+  }
+}
+
 function rulesPath() {
   const planted = join(here, "rules.principles.json");
   return existsSync(planted) ? planted : join(here, "..", "principles", "rules.json");
@@ -75,7 +106,12 @@ const machine = {
   "safety.declared-boundaries-present": (rule) => {
     const manifest = readIf(".claude/harness/manifest.json");
     if (!manifest) return;
-    const declared = JSON.parse(manifest).declared?.safetyBoundaries;
+    const parsed = parseJson(manifest, ".claude/harness/manifest.json");
+    if (!parsed.ok) {
+      add(rule, rule.severity, `${parsed.error} What was declared at setup cannot be read, so this rule could not run.`);
+      return;
+    }
+    const declared = parsed.value.declared?.safetyBoundaries;
     if (!declared) return;
     if (claudeMd && !/^##\s+Safety Boundaries\s*$/m.test(claudeMd))
       add(rule, rule.severity, "Safety boundaries were declared at setup but the section is gone.");
@@ -92,7 +128,12 @@ const machine = {
       add(rule, rule.severity, "The harness is planted but there is no package.json, so the checker is registered nowhere and never runs.");
       return;
     }
-    if (!JSON.parse(pkg).scripts?.["harness:check"])
+    const parsed = parseJson(pkg, "package.json");
+    if (!parsed.ok) {
+      add(rule, rule.severity, `${parsed.error} A package.json npm cannot read registers nothing.`);
+      return;
+    }
+    if (!parsed.value.scripts?.["harness:check"])
       add(rule, rule.severity, 'package.json has no "harness:check" script.');
   },
   "claude-md.budget": (rule, cal) => {
@@ -128,7 +169,15 @@ for (const rule of rules.items) {
     }
   }
   if (rule.decidable === "machine") {
-    machine[rule.id]?.(rule, calValue);
+    // A machine rule with no implementation produced nothing, and nothing is
+    // exactly what a passing rule produces. Silence here is the failure mode
+    // this whole plugin audits other repos for: a check that did not run must
+    // not look like a check that passed.
+    if (!machine[rule.id]) {
+      add(rule, "error", `Declared machine-decidable but no check is implemented for "${rule.id}". It did not run.`, { unimplemented: true });
+      continue;
+    }
+    machine[rule.id](rule, calValue);
   } else {
     add(rule, rule.severity, `Judgement item. Rubric: ${rule.rubric}`, {
       pending: true,
@@ -138,18 +187,31 @@ for (const rule of rules.items) {
   }
 }
 
+// What the plugin would plant today. Only the plugin copy can answer that, so
+// `outdated` is a verdict only it can reach: a planted copy has no way to know
+// the plugin has moved on, and guessing `current` there would be the reassuring
+// answer rather than the true one.
+const plantLib = pluginRoot ? await import("./lib/planted.mjs") : null;
+const canonicalVersion = plantLib ? plantLib.plantedFiles(pluginRoot).version : null;
+
 // Planted copies: same three-state comparison the skill reports on.
 function plantedState() {
   const manifestPath = join(target, ".claude/harness/manifest.json");
   if (!existsSync(manifestPath)) return null;
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const parsed = parseJson(readFileSync(manifestPath, "utf8"), ".claude/harness/manifest.json");
+  if (!parsed.ok) return [{ path: ".claude/harness/manifest.json", state: "unreadable", advice: parsed.error }];
+  const manifest = parsed.value;
+  if (!Array.isArray(manifest.files))
+    return [{ path: ".claude/harness/manifest.json", state: "unreadable", advice: "no files[] array: nothing records what was planted" }];
   const sha = (p) => createHash("sha256").update(readFileSync(p)).digest("hex").slice(0, 16);
   return manifest.files.map((f) => {
     const p = join(target, f.path);
     if (!existsSync(p)) return { path: f.path, state: "missing" };
     const now = sha(p);
     if (now !== f.sha256) return { path: f.path, state: "edited-locally", advice: "merge by hand; do not overwrite" };
-    if (manifest.version !== rules.version) return { path: f.path, state: "outdated", advice: "regenerate" };
+    if (canonicalVersion === null)
+      return { path: f.path, state: "current", advice: "unchanged since planting; whether the plugin has moved on is not checkable from here" };
+    if (manifest.version !== canonicalVersion) return { path: f.path, state: "outdated", advice: "regenerate" };
     return { path: f.path, state: "current" };
   });
 }
@@ -169,11 +231,22 @@ if (fix) {
   }
 
   const pkgRaw = readIf("package.json");
-  if (pkgRaw) {
-    const pkg = JSON.parse(pkgRaw);
-    if (!pkg.scripts?.["harness:check"]) {
+  // Scoped the same way the rule is. Registering the script on a repo with no
+  // planted checker writes a command that fails on the first run - a repair
+  // that leaves the repo worse than it was found.
+  const havePlanted = Boolean(readIf(".claude/harness/manifest.json"));
+  if (pkgRaw && havePlanted) {
+    const parsed = parseJson(pkgRaw, "package.json");
+    if (!parsed.ok) {
+      notes.push(`${parsed.error} Left untouched: rewriting a file we could not read would destroy it.`);
+    } else if (!parsed.value.scripts?.["harness:check"]) {
+      const pkg = parsed.value;
       pkg.scripts = { ...pkg.scripts, "harness:check": "node .claude/harness/check.mjs --mode principles" };
-      write("package.json", JSON.stringify(pkg, null, 2) + "\n");
+      // The repo's own formatting survives, for the reason scaffold.mjs gives
+      // where it does the same thing: reformatting someone's package.json puts
+      // every line of it in the diff for the sake of one added key.
+      const indent = pkgRaw.match(/^[ \t]+(?=")/m)?.[0] ?? 2;
+      write("package.json", JSON.stringify(pkg, null, indent) + (pkgRaw.endsWith("\n") ? "\n" : ""));
       fixed.push('package.json: registered the "harness:check" script');
     }
   }
@@ -181,8 +254,8 @@ if (fix) {
   // Only files still byte-identical to what was planted. `edited-locally` is
   // never touched: the report surfaces it and the owner merges.
   const stale = (planted ?? []).filter((p) => p.state === "outdated" || p.state === "missing");
-  if (stale.length && pluginRoot) {
-    const { plantedFiles, sha } = await import("./lib/planted.mjs");
+  if (stale.length && plantLib) {
+    const { plantedFiles, sha } = plantLib;
     const plant = plantedFiles(pluginRoot);
     const manifestPath = join(target, ".claude/harness/manifest.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));

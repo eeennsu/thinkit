@@ -32,6 +32,26 @@ export function loadProfile(root, stack) {
   return merge(parent, own);
 }
 
+// The interview overlay for a stack, or null when it has none.
+//
+// The path is read from the profile rather than assumed from the directory
+// name, because the profile is what declares the overlay exists. A convention
+// nothing reads is not wiring: it made `questions` a field any stack could set
+// to anything with no effect, and made an overlay a stack forgot to declare
+// load anyway.
+//
+// Returns the resolved absolute path. A declared path that is not on disk is an
+// error, not an absent overlay: silence there is a question set that stopped
+// being asked with nothing reporting it.
+export function questionsPath(root, stack) {
+  const profile = loadProfile(root, stack);
+  if (!profile.questions) return null;
+  const abs = join(root, profile.questions);
+  if (!existsSync(abs))
+    throw new Error(`stack "${stack}" declares questions: "${profile.questions}", which does not exist`);
+  return abs;
+}
+
 // Abstract profiles are excluded: they exist to be extended, and offering one
 // as a choice produces a run that loadProfile then refuses.
 export function listStacks(root) {

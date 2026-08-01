@@ -68,9 +68,18 @@ function fromTsconfig(raw) {
 
 // Returns { alias, source }. `source` is reported, because "15 aliases" means
 // something different when it came from the repo than when we wrote it.
-export async function readAlias(target, profile) {
+//
+// `ours` names the configs that are still byte-for-byte what this plugin wrote.
+// They are skipped, and that is the whole point of the parameter: after the
+// first run our own generated tsconfig.json is sitting in the target, and
+// reading it back turned "we generated this table from the profile" into "the
+// repo already had this table". The report said so, the manifest recorded it,
+// and a second run produced a different manifest than the first from identical
+// inputs. A config the repo has since edited is no longer in the set, so an
+// edited table is read -- which is correct, because by then it is theirs.
+export async function readAlias(target, profile, ours = new Set()) {
   const babelPath = join(target, "babel.config.js");
-  if (existsSync(babelPath)) {
+  if (existsSync(babelPath) && !ours.has("babel.config.js")) {
     try {
       const mod = await import(pathToFileURL(babelPath).href);
       const exported = mod.default ?? mod;
@@ -83,7 +92,7 @@ export async function readAlias(target, profile) {
   }
 
   const tsconfigPath = join(target, "tsconfig.json");
-  if (existsSync(tsconfigPath)) {
+  if (existsSync(tsconfigPath) && !ours.has("tsconfig.json")) {
     const alias = fromTsconfig(readFileSync(tsconfigPath, "utf8"));
     if (alias) return { alias, source: "tsconfig.json" };
   }

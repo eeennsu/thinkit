@@ -1,0 +1,16 @@
+// Fixed values. Formatting preferences cost nothing when decided badly and
+// cost arguments when left open, so the tool decides and nobody writes it down.
+//
+// importOrder is generated from modules/fsd/layers.json. Do not hand-edit it:
+// the layer graph has one owner, and this list is that graph made visible at the
+// top of every file. Side-effect imports are left where they are -- the plugin
+// treats them as barriers, so nothing here has to say so.
+// Regenerate with:  /harness-bootstrap {{stack}}
+export default {
+  semi: true,
+  singleQuote: true,
+  trailingComma: 'all',
+  printWidth: 100,
+  plugins: ['@ianvs/prettier-plugin-sort-imports'],
+  importOrder: {{importOrderJs}},
+};

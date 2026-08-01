@@ -7,9 +7,10 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "./lib/render.mjs";
 import { loadProfile, listStacks } from "./lib/profile.mjs";
-import { plantedFiles, sha } from "./lib/planted.mjs";
+import { plantedFiles, sha, ownedUnchanged } from "./lib/planted.mjs";
 import { readAlias } from "./lib/alias.mjs";
 import { buildElements, buildPolicies, counts, resolveOptions } from "./fsd-boundaries.mjs";
+import { buildImportOrder, renderImportOrder } from "./import-order.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -23,7 +24,71 @@ if (!stack || stack.startsWith("--")) {
   process.exit(2);
 }
 const target = resolve(opt("target", process.cwd()));
-const answers = existsSync(opt("answers", "")) ? JSON.parse(readFileSync(opt("answers"), "utf8")) : {};
+
+// An --answers path that does not resolve is the whole interview thrown away.
+// Falling back to {} produced the strict defaults and reported them as the
+// repo's answers -- the exact failure resolveOptions() refuses to make for a
+// single key, made for all of them at once.
+const answersPath = opt("answers", "");
+let answers = {};
+if (answersPath) {
+  if (!existsSync(answersPath)) {
+    console.error(`--answers ${answersPath}: no such file. Nothing was written.`);
+    process.exit(2);
+  }
+  try {
+    answers = JSON.parse(readFileSync(answersPath, "utf8"));
+  } catch (e) {
+    console.error(`--answers ${answersPath}: not valid JSON (${e.message}). Nothing was written.`);
+    process.exit(2);
+  }
+  if (answers === null || typeof answers !== "object" || Array.isArray(answers)) {
+    console.error(`--answers ${answersPath}: expected a JSON object of answer keys. Nothing was written.`);
+    process.exit(2);
+  }
+}
+
+// Goes straight into the generated rule as an eslint severity. An unknown value
+// is not caught by eslint as a typo -- it is a config error that stops the whole
+// lint run, on a file the repo owner did not write.
+const SEVERITIES = ["error", "warn", "off"];
+if (answers.severity !== undefined && !SEVERITIES.includes(answers.severity)) {
+  console.error(`severity must be one of ${SEVERITIES.join(", ")}: got "${answers.severity}". Nothing was written.`);
+  process.exit(2);
+}
+
+// The shape of the remaining answers, checked here rather than where they are
+// used. Both mistakes are ones a person writing the file by hand makes:
+//
+//   "safetyBoundaries": "no production deploys"   one item, quotes instead of
+//                                                 brackets. A string has a
+//                                                 length, so it read as three
+//                                                 non-empty answers and then
+//                                                 died on .map, after the run
+//                                                 had already written files.
+//   "oneLine": { "ko": "…" }                      renders as [object Object]
+//                                                 into the first line of
+//                                                 someone's CLAUDE.md.
+//
+// Neither is caught by anything downstream, and the second one is not caught at
+// all: it ships.
+const shapeErrors = [];
+for (const key of ["safetyBoundaries", "verification", "exceptions", "routingImports"]) {
+  const v = answers[key];
+  if (v === undefined || v === null) continue;
+  if (!Array.isArray(v)) shapeErrors.push(`${key} must be an array of strings, got ${typeof v}`);
+  else if (v.some((item) => typeof item !== "string")) shapeErrors.push(`${key} must contain only strings`);
+}
+for (const key of ["projectName", "oneLine", "routingRoot"]) {
+  const v = answers[key];
+  if (v === undefined || v === null) continue;
+  if (typeof v !== "string") shapeErrors.push(`${key} must be a string, got ${Array.isArray(v) ? "array" : typeof v}`);
+}
+if (shapeErrors.length) {
+  for (const e of shapeErrors) console.error(e);
+  console.error("Nothing was written.");
+  process.exit(2);
+}
 
 const profile = loadProfile(root, stack);
 const fsd = JSON.parse(readFileSync(join(root, "modules/fsd/layers.json"), "utf8"));
@@ -77,7 +142,7 @@ function putOwned(relPath, content) {
 // two hand-written tables drift and nothing notices. On a repo that already
 // resolves imports the table is read from there instead of invented -- see
 // lib/alias.mjs.
-const { alias, source: aliasSource } = await readAlias(target, profile);
+const { alias, source: aliasSource } = await readAlias(target, profile, ownedUnchanged(target, prev));
 const paths = Object.fromEntries(Object.entries(alias).map(([k, v]) => [`${k}/*`, [`${v}/*`]]));
 const babelAlias = Object.fromEntries(Object.entries(alias).map(([k, v]) => [k, `./${v}`]));
 const fsdRootDir = profile.fsdRoot.replace(/\/+$/, "");
@@ -99,6 +164,11 @@ const vars = {
   includeJson: JSON.stringify(include),
   babelPreset: profile.babelPreset ?? "",
   aliasJson: JSON.stringify(babelAlias, null, 10).replace(/\n {10}\}/, "\n        }"),
+  // Built from the same layer graph and the same alias table as the boundary
+  // policies, so the formatter groups imports in the order the linter allows
+  // them. Passing the resolved fsdOpts matters: routingRoot decides whether
+  // there is a routing group at all.
+  importOrderJs: renderImportOrder(buildImportOrder(fsd, profile, alias, fsdOpts)),
   projectName: answers.projectName ?? "Project",
   oneLine: answers.oneLine ?? "<one line: what this repo is for>",
   safetySection: answers.safetyBoundaries?.length
@@ -154,8 +224,23 @@ put(".claude/harness/manifest.json", JSON.stringify({
 const pkgPath = join(target, "package.json");
 const pkgRaw = existsSync(pkgPath) ? readFileSync(pkgPath, "utf8") : null;
 const pkg = pkgRaw ? JSON.parse(pkgRaw) : { name: vars.projectName.toLowerCase(), private: true, version: "0.0.0" };
-pkg.scripts = { ...pkg.scripts, "harness:check": "node .claude/harness/check.mjs --mode principles", lint: pkg.scripts?.lint ?? "eslint ." };
-pkg.devDependencies = { ...pkg.devDependencies, ...profile.devDependencies, [profile.resolver.devDependency]: pkg.devDependencies?.[profile.resolver.devDependency] ?? "*" };
+// `format` is here for the same reason `lint` is. report.mjs prints an import
+// order count as a rule the tooling enforces, and a formatter no command
+// invokes enforces nothing -- the config is a preference until something runs
+// it. Both are `??`: a repo that already has its own is left with it.
+pkg.scripts = {
+  ...pkg.scripts,
+  "harness:check": "node .claude/harness/check.mjs --mode principles",
+  lint: pkg.scripts?.lint ?? "eslint .",
+  format: pkg.scripts?.format ?? "prettier --write .",
+};
+// An existing pin wins. A repo that fixed a version of eslint or typescript did
+// it for a reason - usually a framework that ships its own - and a harness
+// quietly widening someone's range is a change nobody asked for. Only names that
+// are absent are added.
+pkg.devDependencies = { ...pkg.devDependencies };
+for (const [name, range] of Object.entries({ ...profile.devDependencies, [profile.resolver.devDependency]: "*" }))
+  if (!(name in pkg.devDependencies)) pkg.devDependencies[name] = range;
 // This is the one file here that belongs to the repo and is edited rather than
 // owned, so it keeps the repo's own formatting. Reformatting it to our style
 // would put every line of someone else's package.json in the diff for the sake

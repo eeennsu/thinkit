@@ -12,6 +12,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { listStacks } from "../scripts/lib/profile.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -31,19 +32,28 @@ if (!sandboxArg) {
 const sandbox = resolve(sandboxArg);
 // The plugin resolving is what separates a real result from noise: without it
 // eslint dies per fixture and every case reads as a failure for the wrong reason.
-if (!existsSync(join(sandbox, "node_modules", "eslint-plugin-boundaries"))) {
-  console.error(`No eslint-plugin-boundaries under ${sandbox}. Install the deps there first:`);
+// The generated entry config imports all three, so a missing one crashes eslint
+// before a single fixture is read and every case reads as a failure for the
+// wrong reason.
+const REQUIRED = ["eslint-plugin-boundaries", "typescript-eslint", "eslint-plugin-react-hooks"];
+const absent = REQUIRED.filter((p) => !existsSync(join(sandbox, "node_modules", p)));
+if (absent.length) {
+  console.error(`Missing under ${sandbox}: ${absent.join(", ")}. Install the deps there first:`);
   console.error("  npm install eslint eslint-plugin-boundaries eslint-import-resolver-typescript \\");
   console.error("    eslint-import-resolver-babel-module babel-plugin-module-resolver \\");
-  console.error("    @babel/core @react-native/babel-preset babel-preset-expo");
+  console.error("    @babel/core @react-native/babel-preset babel-preset-expo \\");
+  console.error("    typescript-eslint typescript eslint-plugin-react-hooks");
   process.exit(2);
 }
 // Passing fixtures are deleted; failing ones stay. --keep retains both.
 const keep = args.includes("--keep");
 const kept = [];
 // Every shippable stack, not a sample. report.mjs may only print a boundary
-// count for a stack this file has confirmed.
-const stacks = (opt("stacks", "react,rn-cli,next,rn-expo")).split(",");
+// count for a stack this file has confirmed, so the default set is derived
+// rather than typed: a hardcoded list is a list that a new stack is added
+// without, and the new stack then ships with its counts unconfirmed and nothing
+// saying so.
+const stacks = opt("stacks", "") ? opt("stacks").split(",") : listStacks(root);
 
 // Both axes are exercised alone and together. Testing only the pair would leave
 // them indistinguishable: one answer wrongly relaxing the other's constraint
@@ -98,6 +108,16 @@ const CASES = [
     name: "same-slice internal",
     file: "src/features/d/index.js",
     body: 'import "./helper";\n',
+    violates: { strict: false, "open-api": false, "same-layer": false, "open+same-layer": false },
+  },
+  // The boundaries block claims `**/*.{ts,tsx,js,jsx}` while every other fixture
+  // here is .js, so nothing above would notice a config that cannot parse
+  // TypeScript at all. A missing parser surfaces as a parsing error message,
+  // which fails this control the same way a real violation would.
+  {
+    name: "typescript parses",
+    file: "src/features/e/index.ts",
+    body: "export const n: number = 1;\n",
     violates: { strict: false, "open-api": false, "same-layer": false, "open+same-layer": false },
   },
 ];

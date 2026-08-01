@@ -15,11 +15,18 @@ per item, and omitting a key means the same as answering it empty.
 
 ```json
 {
-  "projectName": "…", "oneLine": "…", "greenfield": false,
+  "projectName": "…", "oneLine": "…",
+  "severity": "error", "greenfield": false,
   "safetyBoundaries": [], "verification": [], "exceptions": [],
   "publicApi": "enforced", "sliceCoupling": "isolated"
 }
 ```
+
+`severity` is Q4's answer and takes `error`, `warn` or `off`. `greenfield` only
+sets its default (`false` → `warn`) and is ignored when `severity` is given. An
+unknown severity stops the run: it is written straight into the generated rule,
+where eslint rejects it as a config error and the whole lint run stops — on a
+file the repo owner did not write.
 
 The last two take one of the values `modules/fsd/layers.json` declares under
 `variants`. An unknown value stops the run; there is no fallback, because a
@@ -93,9 +100,16 @@ the model cannot.
 If the answer is empty: **create no verification skill.** This is the default
 outcome for a new repo and it is correct.
 
-Stack overlays may add context to this question — see
-`${CLAUDE_PLUGIN_ROOT}/stacks/<stack>/questions.json`. An overlay only applies
-while the question is alive; it must not resurrect a dropped question.
+Stack overlays may add context to this question. The overlay path is the
+`questions` field of the resolved stack profile — a stack without that field has
+no overlay, and the file is never looked for by convention. A path that is
+declared and missing stops the run rather than being read as "no overlay":
+`tests/verify-profiles.mjs` holds both directions, so an overlay nothing
+declares is a failing test rather than a question set that quietly stopped
+being asked.
+
+An overlay only applies while the question is alive; it must not resurrect a
+dropped question.
 
 ---
 
@@ -104,7 +118,9 @@ while the question is alive; it must not resurrect a dropped question.
 ```yaml
 id: Q4
 axis: principle
-writes: severity in eslint.config.mjs
+key: severity
+values: [error, warn, off]
+writes: the severity of both boundary rules in eslint.config.boundaries.mjs
 default: error on an empty repo, warn when code already exists
 ```
 
@@ -141,7 +157,7 @@ id: Q6
 axis: principle
 key: publicApi
 values: [enforced, open]
-writes: whether the boundary policies target index.* (eslint.config.mjs)
+writes: whether the boundary policies target index.* (eslint.config.boundaries.mjs)
 default: read the repo, then confirm
 ```
 
@@ -170,7 +186,7 @@ id: Q7
 axis: principle
 key: sliceCoupling
 values: [isolated, same-layer]
-writes: whether each sliced layer gets a self-allow policy (eslint.config.mjs)
+writes: whether each sliced layer gets a self-allow policy (eslint.config.boundaries.mjs)
 default: read the repo, then confirm
 ```
 

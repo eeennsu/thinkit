@@ -35,9 +35,21 @@ path here resolves against the target repo, where these files do not exist.
 
 ## What comes out, and what does not
 
-Written every time: the lint config with the boundary policies, tsconfig,
-formatter, layer directories, CLAUDE.md with an empty Gotchas section, and the
-planted checker registered as `npm run harness:check`.
+Written every time: two lint configs, tsconfig, formatter, layer directories,
+CLAUDE.md with an empty Gotchas section, and the planted checker registered as
+`npm run harness:check`.
+
+`package.json` gets three scripts — `harness:check`, `lint`, `format` — and the
+missing dev dependencies. `format` is not a convenience: the generated import
+order is a rule the report counts as enforced, and a formatter no command runs
+enforces nothing. An existing script or version pin of the repo's own is never
+replaced, and the file keeps its own indentation and key order.
+
+The lint config is two files on purpose. `eslint.config.boundaries.mjs` holds the
+generated boundary policies and is regenerated on every run;
+`eslint.config.mjs` spreads it in and is the repo's to edit. Report it that way.
+A repo told it owns one file and then finding its layer graph frozen after one
+added rule is the failure this split exists to prevent.
 
 Written only where nothing is in the way. A file already on disk that this
 plugin did not write is left alone and reported as `exists, left alone` — a

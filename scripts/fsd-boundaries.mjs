@@ -46,16 +46,34 @@ export function resolveOptions(fsd, profile, answers = {}) {
   // an escaping value puts files outside the repo being set up; the same value
   // also becomes a boundaries element pattern, and a pattern reaching outside
   // the project matches nothing - a config that looks right and enforces zero.
-  const routingRoot = answers.routingRoot ?? profile.routingRoot ?? null;
-  if (routingRoot !== null) {
-    const normalized = String(routingRoot).split("\\").join("/");
+  const given = answers.routingRoot ?? profile.routingRoot ?? null;
+  let routingRoot = null;
+  if (given !== null) {
+    const normalized = String(given).split("\\").join("/").replace(/^\.\//, "").replace(/\/+$/, "");
     if (normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized) || normalized.split("/").includes(".."))
-      throw new Error(`routingRoot must be a repo-relative path that stays inside the repo: "${routingRoot}"`);
+      throw new Error(`routingRoot must be a repo-relative path that stays inside the repo: "${given}"`);
+    // "." and "" both mean the repo root, which is not a routing directory --
+    // it is every directory. As a boundaries pattern it would swallow the layer
+    // elements registered after it; as a path it would write .gitkeep at the
+    // repo root. An answer nobody meant, accepted in silence.
+    if (normalized === "" || normalized === ".")
+      throw new Error(`routingRoot must name a directory, not the repo root: "${given}". Omit the key for a stack with no routing directory.`);
+    // A leading "./" survives into the element pattern, where it matches
+    // nothing: the routing element registers, the policy referring to it is
+    // generated, and zero files are ever classified as routing. A config that
+    // reads correctly and enforces nothing is the failure mode this whole file
+    // is written against, so the path is normalized rather than rejected.
+    routingRoot = normalized;
   }
   opts.routingRoot = routingRoot;
 
   const names = fsd.layers.map((l) => l.name);
   const routingImports = answers.routingImports ?? fsd.routing.mayImport;
+  // A string here is the likely mistake ("app" instead of ["app"]), and without
+  // this it fails as a TypeError inside a filter -- a stack trace pointing at
+  // our code for what is an answer-shape error.
+  if (!Array.isArray(routingImports))
+    throw new Error(`routingImports must be an array of layer names, got ${typeof routingImports}. layers: ${names.join(", ")}`);
   const unknown = routingImports.filter((n) => !names.includes(n));
   if (unknown.length)
     throw new Error(`routingImports names no such layer: ${unknown.join(", ")}. layers: ${names.join(", ")}`);

@@ -19,7 +19,11 @@
     "eslint-plugin-boundaries": "^7",
     "eslint-import-resolver-babel-module": "^5",
     "babel-plugin-module-resolver": "^5",
-    "prettier": "^3"
+    "typescript-eslint": "^8",
+    "typescript": "^5",
+    "eslint-plugin-react-hooks": "^7",
+    "prettier": "^3",
+    "@ianvs/prettier-plugin-sort-imports": "^4"
   },
   "files": [
     {
@@ -27,11 +31,15 @@
       "dest": "eslint.config.mjs"
     },
     {
+      "template": "templates/eslint.config.boundaries.mjs.hbs",
+      "dest": "eslint.config.boundaries.mjs"
+    },
+    {
       "template": "templates/tsconfig.json.hbs",
       "dest": "tsconfig.json"
     },
     {
-      "template": "templates/prettier.config.mjs",
+      "template": "templates/prettier.config.mjs.hbs",
       "dest": "prettier.config.mjs"
     },
     {

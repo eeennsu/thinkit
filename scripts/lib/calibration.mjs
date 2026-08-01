@@ -7,11 +7,16 @@ function parseValueBlock(md) {
   return JSON.parse(m[1]);
 }
 
-export function loadCalibration(root, overrides = {}) {
+// The selected generation per axis comes from index.json's `default`, and only
+// from there. There used to be an `overrides` parameter no caller passed: a
+// second selection mechanism that contradicted the one index.json documents
+// ("add one file per axis and point default at it"), and that nothing could
+// reach. Two ways to select, one of them unreachable, is worse than one.
+export function loadCalibration(root) {
   const index = JSON.parse(readFileSync(join(root, "calibration", "index.json"), "utf8"));
   const resolved = { _selected: {}, _values: {} };
   for (const [axis, spec] of Object.entries(index.axes)) {
-    const pick = overrides[axis] || spec.default;
+    const pick = spec.default;
     const file = spec.files[pick];
     if (!file) throw new Error(`no calibration file for ${axis}=${pick}`);
     resolved._selected[axis] = pick;

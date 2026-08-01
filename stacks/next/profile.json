@@ -13,11 +13,16 @@
     "eslint": "^9",
     "eslint-plugin-boundaries": "^7",
     "eslint-import-resolver-typescript": "^4",
-    "prettier": "^3"
+    "typescript-eslint": "^8",
+    "typescript": "^5",
+    "eslint-plugin-react-hooks": "^7",
+    "prettier": "^3",
+    "@ianvs/prettier-plugin-sort-imports": "^4"
   },
   "files": [
     { "template": "templates/eslint.config.mjs.hbs", "dest": "eslint.config.mjs" },
+    { "template": "templates/eslint.config.boundaries.mjs.hbs", "dest": "eslint.config.boundaries.mjs" },
     { "template": "templates/tsconfig.json.hbs", "dest": "tsconfig.json" },
-    { "template": "templates/prettier.config.mjs", "dest": "prettier.config.mjs" }
+    { "template": "templates/prettier.config.mjs.hbs", "dest": "prettier.config.mjs" }
   ]
 }
