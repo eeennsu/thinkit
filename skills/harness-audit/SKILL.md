@@ -7,11 +7,17 @@ description: Use when reviewing an existing repository harness - CLAUDE.md, skil
 
 ## Order
 
-1. `node scripts/check.mjs --mode full --target <repo> --json`
+1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs" --mode full --target <repo> --json`
 2. The machine findings are already decided. Read them; do not re-derive them.
 3. Resolve every `pending: true` item yourself, using its rubric. These are the
    judgements a script cannot make.
 4. Report **everything**, sorted by severity.
+
+The checker ships with the plugin while the working directory is the repo under
+audit, so it is addressed through `${CLAUDE_PLUGIN_ROOT}`. A repo that was
+bootstrapped also has its own planted copy at `.claude/harness/check.mjs`; that
+one carries only the generation-independent rules, so it is not a substitute
+for `--mode full`.
 
 ## Report everything
 

@@ -94,8 +94,8 @@ If the answer is empty: **create no verification skill.** This is the default
 outcome for a new repo and it is correct.
 
 Stack overlays may add context to this question — see
-`stacks/<stack>/questions.json`. An overlay only applies while the question is
-alive; it must not resurrect a dropped question.
+`${CLAUDE_PLUGIN_ROOT}/stacks/<stack>/questions.json`. An overlay only applies
+while the question is alive; it must not resurrect a dropped question.
 
 ---
 

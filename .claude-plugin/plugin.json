@@ -1,5 +1,20 @@
 {
   "name": "thinkit",
   "description": "Sets up a repo harness by asking what only the repo owner can answer.",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "author": {
+    "name": "eeennsu",
+    "url": "https://github.com/eeennsu"
+  },
+  "homepage": "https://github.com/eeennsu/thinkit",
+  "repository": "https://github.com/eeennsu/thinkit",
+  "keywords": [
+    "claude-md",
+    "harness",
+    "eslint-boundaries",
+    "feature-sliced-design",
+    "react-native",
+    "expo",
+    "nextjs"
+  ]
 }

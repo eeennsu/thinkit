@@ -11,8 +11,9 @@ into files and lint rules.
 
 ## Order
 
-1. **Resolve the stack.** `stacks/<stack>/profile.json`. Refuse abstract
-   profiles. If the argument is missing, list the non-abstract stacks and ask.
+1. **Resolve the stack.** `${CLAUDE_PLUGIN_ROOT}/stacks/<stack>/profile.json`.
+   Refuse abstract profiles. If the argument is missing, list the non-abstract
+   stacks and ask.
 2. **Read what is already there** — `package.json`, existing config, whether
    the repo has code yet, how its imports are actually written, where routes
    are registered. This sets the defaults for Q4, Q6 and Q7, and supplies
@@ -20,13 +21,17 @@ into files and lint rules.
    what you read before it becomes a rule.
 3. **Interview.** `references/interview.md`. Seven questions, each tagged with
    why it exists. Skip a question only for the reason its own entry gives.
-4. **Scaffold.** `node scripts/scaffold.mjs <stack> --target <repo> --answers <file>`.
-5. **Check.** `node scripts/check.mjs --mode full --target <repo>`.
-6. **Report.** `node scripts/report.mjs <stack> --target <repo>`.
+4. **Scaffold.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" <stack> --target <repo> --answers <file>`.
+5. **Check.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs" --mode full --target <repo>`.
+6. **Report.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" <stack> --target <repo>`.
 
 Steps 4-6 are scripts, not instructions to the model. That is deliberate: a
 rule a tool can enforce does not belong in prose, and that includes the rule
 that says to verify the output.
+
+The scripts live with the plugin and the working directory is the repo being
+set up, so they are always addressed through `${CLAUDE_PLUGIN_ROOT}`. A relative
+path here resolves against the target repo, where these files do not exist.
 
 ## What comes out, and what does not
 
