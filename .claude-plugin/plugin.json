@@ -1,0 +1,5 @@
+{
+  "name": "thinkit",
+  "description": "Sets up a repo harness by asking what only the repo owner can answer.",
+  "version": "0.1.0"
+}

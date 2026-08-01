@@ -1,0 +1,30 @@
+// Generated from modules/fsd/layers.json. Do not hand-edit the boundaries block:
+// the layer graph has one owner, and edits here are invisible to it.
+// Regenerate with:  /harness-bootstrap {{stack}}
+import boundaries from 'eslint-plugin-boundaries';
+
+export default [
+  {
+    files: ['**/*.{ts,tsx,js,jsx}'],
+    plugins: { boundaries },
+    settings: {
+      'boundaries/elements': {{elementsJson}},
+      'import/resolver': {{resolverJson}},
+    },
+    rules: {
+      'boundaries/dependencies': [
+        '{{severity}}',
+        {
+          default: 'disallow',
+          // Order is fixed for a stable diff. Every entry below is an allow, so
+          // order does not change the outcome today; a disallow added later must
+          // come last, because the last matching policy wins.
+          policies: {{policiesJson}},
+        },
+      ],
+      // Turned on so an unresolved alias fails loudly instead of silently
+      // passing every boundary check.
+      'boundaries/no-unknown-dependencies': '{{severity}}',
+    },
+  },
+];

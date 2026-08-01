@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "note": "Single source of truth for the layer graph. Layer names are identical across all four stacks; frameworks differ only in where routing lives (profile.routingRoot).",
+  "publicApi": "index.{ts,tsx,js,jsx}",
+  "direction": "downward-only: a layer may import any layer strictly below it, and nothing at or above it",
+  "variants": {
+    "note": "Axes a repo answers, not a stack property: two repos on the same stack answer differently. Declared here because the layer graph owns what may vary about itself; the chosen value arrives from the interview and is recorded in the target's manifest. Layer direction is not an axis - it is the one constraint every variant keeps.",
+    "publicApi": {
+      "values": ["enforced", "open"],
+      "default": "enforced",
+      "means": "enforced: a slice is reachable only through its index.*. open: deep imports into a slice are allowed, and the publicApiEnforced flag on each layer is inert."
+    },
+    "sliceCoupling": {
+      "values": ["isolated", "same-layer"],
+      "default": "isolated",
+      "means": "isolated: a slice may not import a sibling slice of its own layer. same-layer: it may. Cross-layer direction is unaffected either way."
+    }
+  },
+  "layers": [
+    { "name": "app", "sliced": false, "publicApiEnforced": false },
+    { "name": "screens", "sliced": true, "publicApiEnforced": true },
+    { "name": "widgets", "sliced": true, "publicApiEnforced": true },
+    { "name": "features", "sliced": true, "publicApiEnforced": true },
+    { "name": "entities", "sliced": true, "publicApiEnforced": true },
+    { "name": "shared", "sliced": false, "publicApiEnforced": false }
+  ],
+  "routing": {
+    "type": "routing",
+    "note": "Framework routing directory. Enabled only when routingRoot is set - by the stack profile, or by an answer when the repo already has one. It may sit outside fsdRoot (Next app/) or inside it (RN src/navigators/); the element is registered before the layers either way, so a routingRoot under fsdRoot still matches routing and not the layer it sits beside.",
+    "mayImport": ["app", "screens"],
+    "mayImportNote": "Default for a repo whose routing files only register screens. Overridable per repo via the routingImports answer, which must name existing layers."
+  }
+}

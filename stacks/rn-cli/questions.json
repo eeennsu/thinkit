@@ -1,0 +1,22 @@
+{
+  "note": "Context added to interview questions that are still alive. An overlay never revives a question its calibration dropped.",
+  "overlays": [
+    {
+      "question": "Q3",
+      "only_if_alive": true,
+      "prompts": [
+        "Does anything need a simulator or a physical device to be running?",
+        "Is a native build (pod install, Gradle sync) required before the JS tests mean anything?",
+        "Is there a step that cannot run on CI at all?",
+        "Does a green JS suite still leave the native side untested?"
+      ]
+    },
+    {
+      "question": "Q2",
+      "prompts": [
+        "Signing keys, provisioning profiles, keystores?",
+        "Store submission, OTA updates, crash-reporting keys?"
+      ]
+    }
+  ]
+}

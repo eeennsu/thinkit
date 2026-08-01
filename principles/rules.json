@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "note": "Judgement criteria. axis=principle items are generation-independent and are the only ones planted into a target repo.",
+  "items": [
+    {
+      "id": "claude-md.exists",
+      "axis": "principle",
+      "decidable": "machine",
+      "severity": "error",
+      "bootstrap": { "action": "emit", "pass": "CLAUDE.md exists" },
+      "audit": { "check": "file-exists", "path": "CLAUDE.md" },
+      "source": "NR / CLAUDE.md layer"
+    },
+    {
+      "id": "claude-md.gotcha-section",
+      "axis": "principle",
+      "decidable": "machine",
+      "severity": "info",
+      "bootstrap": { "action": "emit-empty-section", "pass": "section exists, empty is fine" },
+      "audit": {
+        "check": "heading-exists",
+        "heading": "Gotchas",
+        "empty": { "severity": "info", "message": "Gotchas is still empty. Is there anything you know now that the code does not show?" }
+      },
+      "source": "NR: spend most of the tokens on gotchas"
+    },
+    {
+      "id": "claude-md.repo-visible.structural",
+      "axis": "principle",
+      "decidable": "machine",
+      "severity": "warn",
+      "audit": {
+        "check": "structural-repo-visible",
+        "detects": ["fenced block containing tree glyphs", "run of >=5 path-like lines", "extension enumeration"]
+      },
+      "source": "NR: avoid stating the obvious things Claude can see"
+    },
+    {
+      "id": "claude-md.repo-visible.prose",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "principles/gotcha-vs-repo-visible.md",
+      "audit": { "check": "agent-reads-claude-md" },
+      "source": "NR"
+    },
+    {
+      "id": "claude-md.memory-log",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "principles/ownership-map.md",
+      "audit": { "check": "agent-reads-claude-md", "asks": "Is any of this a memory of past work rather than a standing fact?" },
+      "source": "NR: memory is no longer CLAUDE.md's job"
+    },
+    {
+      "id": "rule.single-ownership",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "error",
+      "rubric": "principles/ownership-map.md",
+      "audit": { "check": "agent-compares-layers" },
+      "source": "NR: delete the repetition; ECE: conflicting instructions are billed twice"
+    },
+    {
+      "id": "rule.absolute-without-exception",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "principles/ownership-map.md",
+      "audit": { "check": "agent-reads-rules", "asks": "Does this rule carry a condition or an escape hatch?" },
+      "source": "NR: strong guidance that is not always true"
+    },
+    {
+      "id": "tooling.enforceable-rule-in-doc",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "error",
+      "rubric": "principles/tooling-over-docs.md",
+      "audit": { "check": "agent-reads-rules", "asks": "Could a linter, type checker, hook, or CI job enforce this instead?" },
+      "source": "repo constitution"
+    },
+    {
+      "id": "safety.declared-boundaries-present",
+      "axis": "principle",
+      "decidable": "machine",
+      "severity": "error",
+      "conditional_on": "interview.Q2",
+      "audit": { "check": "heading-exists", "heading": "Safety Boundaries", "only_if_declared": true },
+      "source": "NR: except in highly important areas"
+    },
+    {
+      "id": "skill.without-repo-specific-content",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "principles/gotcha-vs-repo-visible.md",
+      "audit": { "check": "agent-reads-skills", "asks": "Does this skill hold anything the model could not work out on its own?" },
+      "source": "NR: skills encode what is particular to you"
+    },
+    {
+      "id": "harness.check-registered",
+      "axis": "principle",
+      "decidable": "machine",
+      "severity": "warn",
+      "bootstrap": { "action": "register-script", "script": "harness:check" },
+      "audit": { "check": "package-script-exists", "script": "harness:check" },
+      "source": "repo constitution: put it in the tool"
+    },
+    {
+      "id": "instruction.duplicates-model-default",
+      "axis": "calibrated",
+      "calibrated_by": "model_defaults",
+      "on_unset": "drop",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "skills/harness-audit/references/judgement-calls.md",
+      "audit": { "check": "agent-reads-all-instructions" },
+      "source": "P5: remove them; they compound with the model's own behavior"
+    },
+    {
+      "id": "review.cutoff-instruction",
+      "axis": "calibrated",
+      "calibrated_by": "review_instruction_form",
+      "on_unset": "drop",
+      "decidable": "judgement",
+      "severity": "error",
+      "rubric": "skills/harness-audit/references/judgement-calls.md",
+      "audit": { "check": "agent-reads-review-instructions" },
+      "source": "P5: ask it to report everything and filter in a separate pass"
+    },
+    {
+      "id": "claude-md.budget",
+      "axis": "calibrated",
+      "calibrated_by": "claude_md_budget",
+      "on_unset": "drop",
+      "decidable": "machine",
+      "severity": "info",
+      "audit": { "check": "token-estimate", "path": "CLAUDE.md" },
+      "source": "no primary source states a number"
+    }
+  ]
+}

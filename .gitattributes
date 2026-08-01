@@ -1,0 +1,7 @@
+# Line endings are checked out identically on every platform. This is not a
+# style preference: scripts/lib/planted.mjs records a SHA-256 for each file the
+# bootstrap plants, and check.mjs uses that hash to tell `current` from
+# `edited-locally`. Let the checkout decide the line endings and the same
+# untouched file hashes differently on Windows than on macOS, which reports a
+# file nobody edited as edited and refuses to refresh it.
+* text=auto eol=lf

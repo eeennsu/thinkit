@@ -1,0 +1,7 @@
+{
+  "name": "rn-expo",
+  "extends": "rn-base",
+  "routingRoot": "app/",
+  "babelPreset": "babel-preset-expo",
+  "questions": "stacks/rn-expo/questions.json"
+}

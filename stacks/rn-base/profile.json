@@ -1,0 +1,42 @@
+{
+  "name": "rn-base",
+  "abstract": true,
+  "fsdRoot": "src/",
+  "routingRoot": null,
+  "alias": {
+    "@": "src"
+  },
+  "resolver": {
+    "name": "babel-module",
+    "settings": {
+      "babel-module": {}
+    },
+    "devDependency": "eslint-import-resolver-babel-module",
+    "why": "React Native resolves aliases through babel-plugin-module-resolver, not tsconfig paths. Only one resolver is configured; mixing two makes resolution failures ambiguous. The resolver loads babel.config.js, so the preset it names must be installed - otherwise eslint dies with MODULE_NOT_FOUND instead of silently passing."
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-plugin-boundaries": "^7",
+    "eslint-import-resolver-babel-module": "^5",
+    "babel-plugin-module-resolver": "^5",
+    "prettier": "^3"
+  },
+  "files": [
+    {
+      "template": "templates/eslint.config.mjs.hbs",
+      "dest": "eslint.config.mjs"
+    },
+    {
+      "template": "templates/tsconfig.json.hbs",
+      "dest": "tsconfig.json"
+    },
+    {
+      "template": "templates/prettier.config.mjs",
+      "dest": "prettier.config.mjs"
+    },
+    {
+      "template": "stacks/rn-base/configs/babel.config.js.hbs",
+      "dest": "babel.config.js"
+    }
+  ]
+}

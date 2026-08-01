@@ -1,0 +1,9 @@
+node_modules/
+
+# Session and run state written by the local agent harness. Machine-local and
+# per-session; nothing here is part of the plugin.
+.omc/
+
+# Boundary-test fixtures. They belong in whatever --sandbox points at, but a
+# failing run keeps them on purpose and a sandbox may be inside the repo.
+verify-*/

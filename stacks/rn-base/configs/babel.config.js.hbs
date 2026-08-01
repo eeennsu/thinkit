@@ -1,0 +1,15 @@
+// Alias table is derived from tsconfig paths by scaffold.mjs. Edit tsconfig.json,
+// not this file: two hand-maintained alias tables drift, and the drift is silent.
+module.exports = {
+  presets: ['{{babelPreset}}'],
+  plugins: [
+    [
+      'module-resolver',
+      {
+        root: ['./'],
+        alias: {{aliasJson}},
+        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
+      },
+    ],
+  ],
+};

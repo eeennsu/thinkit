@@ -1,0 +1,14 @@
+{
+  "name": "eeennsu",
+  "owner": {
+    "name": "eeennsu",
+    "url": "https://github.com/eeennsu"
+  },
+  "plugins": [
+    {
+      "name": "thinkit",
+      "source": "./",
+      "description": "Harness bootstrap and audit. Ships questions, not answers."
+    }
+  ]
+}

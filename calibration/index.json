@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "axes": {
+    "model": { "default": "claude-5", "files": { "claude-5": "calibration/claude-5.md" } },
+    "harness": { "default": "claude-code", "files": { "claude-code": "calibration/harness-claude-code.md" } }
+  },
+  "contract": {
+    "value_requires": ["value", "source"],
+    "unset_policy": "A value with no primary-source citation stays unset. Skills must not guess: an item whose calibrated_by resolves to unset is handled by its on_unset field (drop | ask).",
+    "adding_a_generation": "Add one file per axis and point default at it. Skill bodies do not change."
+  }
+}

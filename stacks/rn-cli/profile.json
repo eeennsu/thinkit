@@ -1,0 +1,6 @@
+{
+  "name": "rn-cli",
+  "extends": "rn-base",
+  "babelPreset": "module:@react-native/babel-preset",
+  "questions": "stacks/rn-cli/questions.json"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "react",
+  "fsdRoot": "src/",
+  "routingRoot": null,
+  "alias": { "@": "src" },
+  "resolver": {
+    "name": "typescript",
+    "settings": { "typescript": { "alwaysTryTypes": true } },
+    "devDependency": "eslint-import-resolver-typescript",
+    "why": "Aliases come from tsconfig paths."
+  },
+  "devDependencies": {
+    "eslint": "^9",
+    "eslint-plugin-boundaries": "^7",
+    "eslint-import-resolver-typescript": "^4",
+    "prettier": "^3"
+  },
+  "files": [
+    { "template": "templates/eslint.config.mjs.hbs", "dest": "eslint.config.mjs" },
+    { "template": "templates/tsconfig.json.hbs", "dest": "tsconfig.json" },
+    { "template": "templates/prettier.config.mjs", "dest": "prettier.config.mjs" }
+  ]
+}
