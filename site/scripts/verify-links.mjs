@@ -5,8 +5,8 @@
 // dist를 걷는 스크립트는 이것 하나다. 둘로 나누면 기대 라우트 목록이 두 곳에 생기고,
 // 두 곳은 갈라진다.
 //
-//   node scripts/verify-links.mjs                  링크·앵커·라우트
-//   node scripts/verify-links.mjs --base /thinkit  루트 상대 링크가 base를 달고 있는지까지
+//   node scripts/verify-links.mjs                  링크·앵커·라우트. base가 있으면 접두사까지
+//   node scripts/verify-links.mjs --base /x        그 판정을 덮어쓴다 (대조군이 쓰는 자리)
 //   node scripts/verify-links.mjs --search 충돌,경계 pagefind 인덱스에 실제 질의
 //   node scripts/verify-links.mjs --ui             라벨·permalink·인용 시점·img alt
 //   node scripts/verify-links.mjs --ui --contrast  위 + 강조색 대비비 (라이트/다크 각각)
@@ -332,9 +332,11 @@ async function checkSearch(dist, terms) {
 const FIXTURE_LABELS = `<h3 class="sample-label">${LABEL_BEFORE}</h3>`;
 const fixturePage = (body) => `<!doctype html><html lang="ko"><body>${body}</body></html>\n`;
 
-function buildFixture(dir) {
+// base를 인자로 받는다. 접두사 대조군은 astro.config가 지금 무엇이든 자기 접두사로
+// 픽스처를 세워야 한다 — 배포 경로가 루트로 내려간 순간 그 대조군이 아무것도 안 깨고
+// 조용히 통과하면, 접두사 검사가 살아 있는지 아무도 모르게 된다.
+function buildFixture(dir, base = configuredBase()) {
   rmSync(dir, { recursive: true, force: true });
-  const base = configuredBase();
   const routes = expectedRoutes();
 
   for (const route of routes) {
@@ -414,13 +416,21 @@ async function selfTest() {
         return ["--dist", d];
       },
     },
+    // 접두사 검사는 자기 접두사를 가진 픽스처로 본다. 온전한 쪽을 먼저 두는 이유는
+    // 다른 대조군과 같다 — 부정 케이스만으로는 접두사 모드 전체를 실패시키는 검사기와
+    // 구분이 안 된다.
+    {
+      name: "base-ok",
+      expect: null,
+      args: () => ["--dist", buildFixture(dist("base-ok"), "/thinkit"), "--base", "/thinkit"],
+    },
     {
       name: "missing-base",
       expect: "BASE",
       args: () => {
-        const d = buildFixture(dist("missing-base"));
-        patch(join(d, "index.html"), `${base}/docs/principles/`, "/docs/principles/");
-        return ["--dist", d, "--base", base];
+        const d = buildFixture(dist("missing-base"), "/thinkit");
+        patch(join(d, "index.html"), "/thinkit/docs/principles/", "/docs/principles/");
+        return ["--dist", d, "--base", "/thinkit"];
       },
     },
     {
@@ -560,14 +570,23 @@ if (!existsSync(dist)) {
   process.exit(2);
 }
 
-const strictBase = args.includes("--base");
-const base = strictBase ? opt("base", "").replace(/\/+$/, "") : configuredBase();
+// 접두사 검사는 별도 명령이 아니다. base가 있으면 기본 실행이 자동으로 켠다 —
+// 별도 스텝으로 두면 배포 경로가 바뀔 때 그 스텝을 다시 다는 것을 잊을 수 있고,
+// 잊힌 검사는 없는 검사다. `--base`는 그 판정을 덮어쓰는 자리이고, 대조군이 쓴다.
+const base = (has("base") ? opt("base", "") : configuredBase()).replace(/\/+$/, "");
+const strictBase = Boolean(base);
 const searchTerms = (opt("search", "") || "").split(",").map((t) => t.trim()).filter(Boolean);
 
 const problems = [];
 if (searchTerms.length) {
   problems.push(...(await checkSearch(dist, searchTerms)));
 } else {
+  // 건너뛴 것은 말한다. 조용히 빠지면 통과가 "접두사도 봤다"로 읽힌다.
+  console.log(
+    strictBase
+      ? `  base ${base}: 루트 상대 링크가 접두사를 갖는지까지 본다`
+      : "  base 없음: 벗길 접두사가 없어 접두사 검사는 돌지 않는다"
+  );
   problems.push(...checkLinks(dist, base, { strictBase }));
   problems.push(...checkRoutes(dist));
   if (has("ui")) {

@@ -47,10 +47,10 @@ jobs:
       # 모드를 전부 도는 이유는 하나만 도는 검사기가 나머지를 죽은 코드로 만들기 때문이다.
       - name: 검사기 대조군
         run: node scripts/verify-links.mjs --self-test
+      # base 접두사 검사는 별도 스텝이 아니다. astro.config의 BASE가 비어 있지 않으면
+      # 아래 실행이 스스로 켠다 — 스텝으로 두면 배포 경로가 바뀔 때 다시 다는 것을 잊는다.
       - name: 링크·앵커·라우트
         run: node scripts/verify-links.mjs
-      - name: base 접두사
-        run: node scripts/verify-links.mjs --base /thinkit
       - name: 한국어 검색 인덱스
         run: node scripts/verify-links.mjs --search 충돌,경계
       - name: UI 계약과 대비비

@@ -5,11 +5,15 @@ import { remarkRepoLinks } from "./src/plugins/remark-repo-links.mjs";
 
 // base는 여기 한 번만 산다. 링크 다시 쓰기(remark)와 링크 검사(scripts/verify-links.mjs)가
 // 둘 다 이 값을 읽는다. 세 곳에 적으면 배포 경로만 바뀌었을 때 둘이 갈라진다.
-export const BASE = "/thinkit";
+//
+// 커스텀 도메인은 루트로 서빙된다. 하위 경로가 없으므로 접두사도 없다 — 빈 문자열이다.
+// 다시 `<user>.github.io/<repo>` 아래로 내려가면 여기를 "/thinkit"으로 되돌리는 것이
+// 전부이고, verify-links가 그때 접두사 검사를 스스로 켠다.
+export const BASE = "";
 
 export default defineConfig({
-  site: "https://eeennsu.github.io",
-  base: BASE,
+  site: "https://thinkit.eunsu.pro",
+  base: `${BASE}/`,
   markdown: {
     processor: unified({ remarkPlugins: [[remarkRepoLinks, { base: BASE }]] }),
   },
