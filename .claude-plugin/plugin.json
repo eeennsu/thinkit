@@ -1,7 +1,7 @@
 {
   "name": "thinkit",
   "description": "Sets up a repo harness by asking what only the repo owner can answer.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "eeennsu",
     "url": "https://github.com/eeennsu"
