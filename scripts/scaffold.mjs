@@ -294,6 +294,21 @@ put("package.json", JSON.stringify(pkg, null, indent) + trailingNewline);
 // it is invisible in `written` -- the line there says "CLAUDE.md: exists, left
 // alone", which reads like the harmless outcome it usually is.
 const notes = [];
+// `warn` is the default on a repo that already has code, and the reason is that
+// `error` drowns the first run until someone switches the rule off. That reason
+// assumes a warning is survivable. A lint script running --max-warnings 0 turns
+// every warning into a failed command, so the two answers are the same answer --
+// and on this repo the build calls lint, which makes them the same build.
+{
+  const lint = String(pkg.scripts?.lint ?? "");
+  const zeroWarnings = /--max-warnings[= ]0\b/.test(lint);
+  if (zeroWarnings && vars.severity === "warn")
+    notes.push(
+      `severity=warn, but the repo's lint script runs --max-warnings 0, so a warning fails the command ` +
+        `exactly like an error does${/\blint\b/.test(String(pkg.scripts?.build ?? "")) ? ", and build calls lint" : ""}. ` +
+        `Answer severity=off to land the policies without gating anything yet.`
+    );
+}
 if (fsdOpts.extraRoots.length)
   notes.push(
     `${fsdOpts.extraRoots.length} directories under ${profile.fsdRoot} are not layers (${fsdOpts.extraRoots.join(", ")}). ` +

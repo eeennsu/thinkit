@@ -259,6 +259,33 @@ console.log("answers with nowhere to go");
   ok("removing a section we wrote still errors", fired, "the rule stopped catching what it exists for");
 }
 
+console.log("warn on a repo that fails on warnings");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(join(tmp, "src"), { recursive: true });
+  const answers = join(tmp, "answers.json");
+  writeFileSync(answers, JSON.stringify({ severity: "warn" }));
+  const run = (scripts) => {
+    writeFileSync(join(tmp, "package.json"), JSON.stringify({ name: "x", scripts }, null, 2) + "\n");
+    return JSON.parse(execFileSync(process.execPath,
+      [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers, "--json"],
+      { encoding: "utf8" })).notes.join("\n");
+  };
+
+  ok("--max-warnings 0 makes warn behave like error, and it is said so",
+    /--max-warnings 0/.test(run({ lint: "eslint . --max-warnings 0" })));
+  ok("the build coupling is called out when it exists",
+    /build calls lint/.test(run({ lint: "eslint . --max-warnings 0", build: "bun run lint && next build" })));
+  ok("and not when it does not",
+    !/build calls lint/.test(run({ lint: "eslint . --max-warnings 0", build: "next build" })));
+  ok("a lint that tolerates warnings says nothing",
+    !/max-warnings/.test(run({ lint: "eslint ." })));
+
+  writeFileSync(answers, JSON.stringify({ severity: "error" }));
+  ok("severity=error is not the case this note is about",
+    !/max-warnings/.test(run({ lint: "eslint . --max-warnings 0" })));
+}
+
 console.log("devDependency pins");
 {
   const profile = JSON.parse(readFileSync(join(root, "stacks/next/profile.json"), "utf8"));
