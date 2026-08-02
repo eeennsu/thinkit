@@ -70,9 +70,20 @@ const importGroups = prettier ? groupDirs(fsd, profile, fsdOpts).length : 0;
 // read it". On a repo that already had eslint.config.js, ours is never loaded --
 // so the boundary policies in it enforce nothing, and a total that includes them
 // is a claim no run can support. Counted only when the file is the one in effect.
-const eslintShadow = owns("eslint.config.mjs") ? shadowed(target, "eslint.config.mjs") : { shadowed: false, winner: null };
-const prettierShadow = prettier ? shadowed(target, "prettier.config.mjs") : { shadowed: false, winner: null };
+const eslintShadow = owns("eslint.config.mjs")
+  ? shadowed(target, "eslint.config.mjs", ["eslint.config.mjs", "eslint.config.boundaries.mjs"])
+  : { shadowed: false, winner: null, via: null };
+const prettierShadow = prettier
+  ? shadowed(target, "prettier.config.mjs", ["prettier.config.mjs"])
+  : { shadowed: false, winner: null, via: null };
+// Only the shadowed case annotates every line: it changes what each number
+// means. Being wired in through the repo's own entry config is one fact about
+// the run, so it is stated once below rather than four times in the margin --
+// and it leaves the variant notes ("answered: publicApi=open") their place.
 const shadowNote = (s) => (s.shadowed ? `   <- generated but shadowed by ${s.winner}; not loaded, not counted` : "");
+const viaLines = [eslintShadow, prettierShadow]
+  .filter((s) => s.via)
+  .map((s) => `  Loaded through ${s.via}, which the repo owns and spreads ours into.`);
 const live = (s, n) => (s.shadowed ? 0 : n);
 
 // The alias table only enforces anything once it is written somewhere. When it
@@ -143,6 +154,7 @@ const lines = [
   `  path consistency   ${aliasesPlanted ? aliases : 0}   (${aliasNote})`,
   `  ---`,
   `  total              ${live(eslintShadow, c.layerDirection + c.sliceIsolation + c.publicApi + c.routing) + strictFlags + live(prettierShadow, prettier + importGroups) + (aliasesPlanted ? aliases : 0)}`,
+  ...viaLines,
   `  Footnote: the total is the plain sum of the lines above, minus any line marked`,
   `  shadowed -- a config the tool never loads enforces nothing, whoever wrote it.`,
   `  Each line counts a different kind of thing, so the total is a sum, not a score.`,

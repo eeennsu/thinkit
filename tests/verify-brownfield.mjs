@@ -92,6 +92,29 @@ console.log("precedence");
   ok("a package.json without the key does not", shadowed(tmp, "prettier.config.mjs").shadowed === false);
 
   ok("an unknown name claims no precedence", shadowed(tmp, "tsconfig.json").shadowed === false);
+
+  // The repo is told to spread ours into its own entry config. A repo that did
+  // it has a winner that also loads us, and calling that shadowed would report a
+  // wired harness as dead.
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  writeFileSync(join(tmp, "eslint.config.mjs"), "export default [];\n");
+  writeFileSync(join(tmp, "eslint.config.boundaries.mjs"), "export default [];\n");
+  const ours = ["eslint.config.mjs", "eslint.config.boundaries.mjs"];
+
+  writeFileSync(join(tmp, "eslint.config.js"), "export default [ /* nothing of ours */ ];\n");
+  const dead = shadowed(tmp, "eslint.config.mjs", ours);
+  ok("a winner that ignores ours is shadowed", dead.shadowed && dead.via === null);
+
+  writeFileSync(join(tmp, "eslint.config.js"),
+    "import boundaries from './eslint.config.boundaries.mjs';\nexport default [...boundaries];\n");
+  const wired = shadowed(tmp, "eslint.config.mjs", ours);
+  ok("a winner that spreads ours is not", wired.shadowed === false, JSON.stringify(wired));
+  ok("and it reports which file loads us", wired.via === "eslint.config.js");
+
+  // Default ourFiles is the file asked about, so the entry config alone counts.
+  writeFileSync(join(tmp, "eslint.config.js"), "import x from './eslint.config.mjs';\nexport default x;\n");
+  ok("the single-file form works too", shadowed(tmp, "eslint.config.mjs").shadowed === false);
 }
 
 console.log("alias");

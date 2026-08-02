@@ -57,16 +57,45 @@ function present(target, member) {
   return existsSync(join(target, member));
 }
 
-// { shadowed, winner, family }. `shadowed` is false when the concern has no
+// Losing the precedence race is not the same as being unused. The repo is told
+// to keep its own entry config and spread ours into it, and a repo that did
+// exactly that has an eslint.config.js that wins the lookup *and* imports the
+// generated policies. Reporting that as shadowed would call a correctly wired
+// harness dead, which is the same kind of wrong -- in the other direction -- as
+// the count this file exists to stop.
+//
+// The test is a mention of one of our filenames in the winner. It is a text
+// match, so a path assembled at runtime is missed; that errs toward reporting
+// shadowed, which is the safe direction.
+function referencesOurs(target, winner, ourFiles) {
+  if (winner === "package.json#prettier") return false;
+  let text;
+  try {
+    text = readFileSync(join(target, winner), "utf8");
+  } catch {
+    return false;
+  }
+  return ourFiles.some((f) => f && text.includes(f));
+}
+
+// { shadowed, winner, via, family }. `shadowed` is false when the concern has no
 // known family -- we only claim precedence where a published order says so,
 // because a guessed one would move counts around for no reason.
-export function shadowed(target, rel) {
+//
+// `ourFiles` names every file this harness generated for the concern, not just
+// the one being asked about: the entry config is what precedence ranks, and the
+// file a repo actually spreads in is the one beside it.
+export function shadowed(target, rel, ourFiles = [rel]) {
   const family = familyOf(rel);
-  if (!family) return { shadowed: false, winner: null, family: null };
+  if (!family) return { shadowed: false, winner: null, via: null, family: null };
   const members = FAMILIES[family];
   const ourRank = members.indexOf(rel);
   for (let i = 0; i < ourRank; i++) {
-    if (present(target, members[i])) return { shadowed: true, winner: members[i], family };
+    if (!present(target, members[i])) continue;
+    const winner = members[i];
+    return referencesOurs(target, winner, ourFiles)
+      ? { shadowed: false, winner, via: winner, family }
+      : { shadowed: true, winner, via: null, family };
   }
-  return { shadowed: false, winner: present(target, rel) ? rel : null, family };
+  return { shadowed: false, winner: present(target, rel) ? rel : null, via: null, family };
 }
