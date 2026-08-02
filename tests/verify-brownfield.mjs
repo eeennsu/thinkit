@@ -161,6 +161,58 @@ console.log("claude.md imports");
   ok("a cycle between imports terminates", cycled);
 }
 
+console.log("answers with nowhere to go");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  // The brownfield shape: a CLAUDE.md the repo already owns. Q2 is answered, and
+  // the section it writes lives in exactly that file.
+  writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md\n");
+  writeFileSync(join(tmp, "AGENTS.md"), "# Agents\n\n## Gotchas\n");
+  const answers = join(tmp, "answers.json");
+  writeFileSync(answers, JSON.stringify({ safetyBoundaries: ["production deploys", "the signing key"] }));
+
+  const out = execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers, "--json"],
+    { encoding: "utf8" });
+  const summary = JSON.parse(out);
+  const manifest = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
+
+  ok("CLAUDE.md is left alone", summary.written.some((w) => w.path === "CLAUDE.md" && w.state === "exists, left alone"));
+  ok("an answer that was not written is not recorded as declared",
+    manifest.declared.safetyBoundaries === false,
+    "declared:true here makes check.mjs report a section that was never written as gone");
+  ok("the dropped answer is surfaced, not swallowed",
+    summary.notes.some((n) => /Safety Boundaries/.test(n)), JSON.stringify(summary.notes));
+
+  // And the false error it used to produce does not appear.
+  const checkOut = execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
+    { encoding: "utf8" });
+  ok("no phantom \"the section is gone\"",
+    !/section is gone/.test(checkOut), "the rule fired on a section that was never written");
+
+  // The case the rule does exist for: we wrote CLAUDE.md, the repo removed the
+  // section afterwards. That must still be an error.
+  rmSync(join(tmp, "CLAUDE.md"));
+  execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers],
+    { encoding: "utf8" });
+  const written = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
+  ok("a section we did write is recorded as declared", written.declared.safetyBoundaries === true);
+  writeFileSync(join(tmp, "CLAUDE.md"),
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").replace(/^##\s+Safety Boundaries[\s\S]*?(?=^##\s|$)/m, ""));
+  let fired = false;
+  try {
+    execFileSync(process.execPath,
+      [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
+      { encoding: "utf8" });
+  } catch (e) {
+    fired = /section is gone/.test(e.stdout ?? "");
+  }
+  ok("removing a section we wrote still errors", fired, "the rule stopped catching what it exists for");
+}
+
 console.log("devDependency pins");
 {
   const profile = JSON.parse(readFileSync(join(root, "stacks/next/profile.json"), "utf8"));

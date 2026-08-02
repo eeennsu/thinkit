@@ -205,10 +205,20 @@ for (const { path: rel, content } of plant.files) putOwned(rel, content);
 // The variants are recorded because report.mjs cannot re-derive them: they came
 // from an answer, not from the stack. A report that recomputed them from the
 // profile would print the strict counts for a repo that answered otherwise.
+// Answered *and* written. The section this records lives in CLAUDE.md, and a
+// repo that already had one keeps it -- so on a brownfield repo the answer was
+// collected and then had nowhere to go. Recording it as declared anyway made
+// check.mjs report "declared at setup but the section is gone", which is both an
+// `error` that never clears and a false sentence: nothing is gone, nothing was
+// ever written. A file we own but the repo has since edited stays declared, and
+// that is the case the rule was built for.
+const ownsClaudeMd = manifestFiles.some((f) => f.path === "CLAUDE.md");
+const boundariesDropped = Boolean(answers.safetyBoundaries?.length) && !ownsClaudeMd;
+
 put(".claude/harness/manifest.json", JSON.stringify({
   version: plant.version,
   stack,
-  declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) },
+  declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) && ownsClaudeMd },
   fsd: {
     publicApi: fsdOpts.publicApi,
     sliceCoupling: fsdOpts.sliceCoupling,
@@ -256,9 +266,21 @@ const indent = pkgRaw?.match(/^[ \t]+(?=")/m)?.[0] ?? 2;
 const trailingNewline = pkgRaw && !pkgRaw.endsWith("\n") ? "" : "\n";
 put("package.json", JSON.stringify(pkg, null, indent) + trailingNewline);
 
+// An answer that was collected and then had nowhere to go is not a detail of the
+// file list. It is the one thing in this run the repo owner has to act on, and
+// it is invisible in `written` -- the line there says "CLAUDE.md: exists, left
+// alone", which reads like the harmless outcome it usually is.
+const notes = [];
+if (boundariesDropped)
+  notes.push(
+    `Q2 was answered but CLAUDE.md already existed, so no "## Safety Boundaries" section was written. ` +
+      `The ${answers.safetyBoundaries.length} boundaries are in your answers file and nowhere else -- add them to CLAUDE.md by hand.`
+  );
+
 const summary = {
   stack,
   target,
+  notes,
   written,
   counts: counts(fsd, profile, fsdOpts),
   fsd: { publicApi: fsdOpts.publicApi, sliceCoupling: fsdOpts.sliceCoupling },
@@ -266,4 +288,7 @@ const summary = {
   aliasSource,
 };
 if (args.includes("--json")) console.log(JSON.stringify(summary, null, 2));
-else console.log(`scaffolded ${stack} into ${target}: ${written.length} files`);
+else {
+  console.log(`scaffolded ${stack} into ${target}: ${written.length} files`);
+  for (const n of notes) console.log(`  note: ${n}`);
+}
