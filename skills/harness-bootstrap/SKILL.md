@@ -35,9 +35,15 @@ path here resolves against the target repo, where these files do not exist.
 
 ## What comes out, and what does not
 
-Written every time: two lint configs, tsconfig, formatter, layer directories,
-CLAUDE.md with an empty Gotchas section, and the planted checker registered as
+Written every time: two lint configs, tsconfig, formatter, CLAUDE.md with an
+empty Gotchas section, and the planted checker registered as
 `npm run harness:check`.
+
+Layer directories are written **only into a repo with no code under `fsdRoot`**.
+On an empty repo they are the point — a layer graph with nowhere to put anything
+is a document. On a repo that already has code, `src/entities/.gitkeep` for a
+layer that repo never had is a directory nobody asked for, and the policies do
+not need it to exist. The absent layers are named in the report instead.
 
 `package.json` gets three scripts — `harness:check`, `lint`, `format` — and the
 missing dev dependencies. `format` is not a convenience: the generated import

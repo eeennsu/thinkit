@@ -215,8 +215,29 @@ if (answers.verification?.length)
   putOwned(".claude/skills/verification/SKILL.md", render(readFileSync(join(root, "templates/verification.SKILL.md.hbs"), "utf8"), vars));
 
 // Layer directories exist on disk; they are never described in CLAUDE.md.
-for (const layer of fsd.layers) put(`${fsdRootDir}/${layer.name}/.gitkeep`, "");
-if (fsdOpts.routingRoot) put(`${fsdOpts.routingRoot.replace(/\/+$/, "")}/.gitkeep`, "");
+//
+// On an empty repo they are the point: the layer graph is a shape, and a shape
+// with nowhere to put anything is a document. On a repo that already has code it
+// is the opposite -- `src/entities/.gitkeep` for a layer that repo never had is
+// a directory nobody asked for, in a diff nobody wanted, for a policy that
+// matches nothing either way. The policies do not need the directory to exist.
+//
+// Read, not asked: a directory under fsdRoot holding anything but our own
+// .gitkeep means the repo has code there.
+const hasCode = (dir) => {
+  if (!existsSync(dir)) return false;
+  return readdirSync(dir, { withFileTypes: true }).some((e) =>
+    e.isDirectory() ? hasCode(join(dir, e.name)) : e.name !== ".gitkeep"
+  );
+};
+const greenfield = !hasCode(join(target, fsdRootDir));
+const absentLayers = [];
+for (const layer of fsd.layers) {
+  const rel = `${fsdRootDir}/${layer.name}`;
+  if (greenfield) put(`${rel}/.gitkeep`, "");
+  else if (!existsSync(join(target, rel))) absentLayers.push(layer.name);
+}
+if (fsdOpts.routingRoot && greenfield) put(`${fsdOpts.routingRoot.replace(/\/+$/, "")}/.gitkeep`, "");
 
 // Plant the checker itself, plus the principle-only rule set. The list and its
 // content live in lib/planted.mjs so that check.mjs --fix refreshes exactly
@@ -309,6 +330,12 @@ const notes = [];
         `Answer severity=off to land the policies without gating anything yet.`
     );
 }
+if (absentLayers.length)
+  notes.push(
+    `${fsdRootDir}/ already has code, so no layer directories were created. ` +
+      `${absentLayers.join(", ")} ${absentLayers.length === 1 ? "does" : "do"} not exist here; the policies for ` +
+      `${absentLayers.length === 1 ? "it" : "them"} are generated and match nothing until you make ${absentLayers.length === 1 ? "it" : "them"}.`
+  );
 if (fsdOpts.extraRoots.length)
   notes.push(
     `${fsdOpts.extraRoots.length} directories under ${profile.fsdRoot} are not layers (${fsdOpts.extraRoots.join(", ")}). ` +

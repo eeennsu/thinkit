@@ -184,6 +184,41 @@ console.log("claude.md imports");
   ok("a cycle between imports terminates", cycled);
 }
 
+console.log("layer directories");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  const empty = execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--json"], { encoding: "utf8" });
+  ok("an empty repo gets every layer directory",
+    ["app", "screens", "widgets", "features", "entities", "shared"].every((l) => existsSync(join(tmp, "src", l))));
+  ok("and is told nothing about missing ones", !JSON.parse(empty).notes.some((n) => /do not exist/.test(n)));
+
+  // A repo with code: only the layers it already has, and nothing new on disk.
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(join(tmp, "src/features/auth"), { recursive: true });
+  mkdirSync(join(tmp, "src/shared"), { recursive: true });
+  writeFileSync(join(tmp, "src/features/auth/index.ts"), "export {};\n");
+  const brown = JSON.parse(execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--json"], { encoding: "utf8" }));
+  ok("a repo with code gets no new layer directory",
+    !existsSync(join(tmp, "src/entities")) && !existsSync(join(tmp, "src/screens")));
+  ok("and no .gitkeep in the ones it has",
+    !existsSync(join(tmp, "src/features/.gitkeep")) && !existsSync(join(tmp, "src/shared/.gitkeep")));
+  ok("the absent layers are named", brown.notes.some((n) => /entities/.test(n) && /do not exist/.test(n)),
+    JSON.stringify(brown.notes));
+  ok("no layer directory shows up as written",
+    !brown.written.some((w) => /^src\/(entities|screens)\//.test(w.path)));
+
+  // A directory holding only our own .gitkeep is not code -- a re-run on a repo
+  // bootstrapped while empty must still count as greenfield.
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(join(tmp, "src/features"), { recursive: true });
+  writeFileSync(join(tmp, "src/features/.gitkeep"), "");
+  execFileSync(process.execPath, [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp], { encoding: "utf8" });
+  ok("a .gitkeep-only tree is still greenfield", existsSync(join(tmp, "src/entities")));
+}
+
 console.log("directories that are not layers");
 {
   rmSync(tmp, { recursive: true, force: true });

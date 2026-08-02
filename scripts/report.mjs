@@ -111,6 +111,9 @@ const files = [
   ".claude/harness/manifest.json",
 ].filter((p) => existsSync(join(target, p)));
 
+const layerDirs = fsd.layers.filter((l) => existsSync(join(target, profile.fsdRoot.replace(/\/+$/, ""), l.name)));
+const missingLayers = fsd.layers.filter((l) => !layerDirs.includes(l)).map((l) => l.name);
+
 const claudeMd = existsSync(join(target, "CLAUDE.md")) ? readFileSync(join(target, "CLAUDE.md"), "utf8") : "";
 const tokens = Math.round(claudeMd.length / 4);
 
@@ -141,7 +144,12 @@ const lines = [
   ``,
   `Files created        ${files.length}`,
   ...files.map((f) => `  - ${f}`),
-  `  - ${fsd.layers.length} layer directories under ${profile.fsdRoot}${fsdOpts.routingRoot ? ` + ${fsdOpts.routingRoot}` : ""}`,
+  // What is on disk, not what the graph has. Bootstrap creates layer
+  // directories only on an empty repo, so on every other one this line used to
+  // report directories that were never made.
+  `  - ${layerDirs.length} of ${fsd.layers.length} layer directories present under ${profile.fsdRoot}${
+    layerDirs.length < fsd.layers.length ? ` (missing: ${missingLayers.join(", ")})` : ""
+  }${fsdOpts.routingRoot ? ` + ${fsdOpts.routingRoot}` : ""}`,
   ``,
   `Rules enforced by tooling`,
   `  layer direction    ${c.layerDirection}   (forbidden ordered layer pairs derived from layers.json)${shadowNote(eslintShadow)}`,
