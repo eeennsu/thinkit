@@ -79,6 +79,25 @@ export function resolveOptions(fsd, profile, answers = {}) {
     throw new Error(`routingImports names no such layer: ${unknown.join(", ")}. layers: ${names.join(", ")}`);
   opts.routingImports = routingImports;
 
+  // Directories under fsdRoot that are not layers. Every repo that predates the
+  // harness has some -- src/db, src/data, src/subjects -- and without an element
+  // registered for them `boundaries/no-unknown-dependencies` fires on every
+  // import that reaches one. On a repo whose lint runs with --max-warnings 0
+  // that is not a finding, it is a config nobody can turn on.
+  //
+  // Read from the repo, not asked: which directories exist is repo-visible. What
+  // they mean is not, so they are placed where the least can go wrong -- at the
+  // bottom, importable by everything, importing only the bottom layer and each
+  // other. That is the position `shared` already holds, and it is the only one
+  // that adds no permission the layer graph did not already grant.
+  const extraRoots = answers.extraRoots ?? [];
+  if (!Array.isArray(extraRoots))
+    throw new Error(`extraRoots must be an array of directory names, got ${typeof extraRoots}`);
+  const collides = extraRoots.filter((n) => names.includes(n));
+  if (collides.length)
+    throw new Error(`extraRoots names a layer, which already has an element: ${collides.join(", ")}`);
+  opts.extraRoots = extraRoots.map(trimSlash);
+
   return opts;
 }
 
@@ -97,6 +116,11 @@ export function buildElements(fsd, profile, opts = {}) {
         ? { type: layer.name, pattern: `${root}/${layer.name}/*`, capture: ["slice"] }
         : { type: layer.name, pattern: `${root}/${layer.name}` }
     );
+  }
+  // After the layers: a non-layer root never collides with a layer pattern
+  // (resolveOptions rejects a name that would), so the order is for reading.
+  for (const extra of o.extraRoots ?? []) {
+    elements.push({ type: extra, pattern: `${root}/${extra}` });
   }
   return elements;
 }
@@ -118,11 +142,13 @@ export function buildPolicies(fsd, profile, opts = {}) {
       ? { element: { type: name, fileInternalPath: fsd.publicApi } }
       : { element: { type: name } };
   };
+  const extras = o.extraRoots ?? [];
+  const bottom = names[names.length - 1];
   const policies = [];
   if (o.routingRoot) {
     policies.push({
       from: { element: { type: fsd.routing.type } },
-      allow: { to: { element: { types: { anyOf: o.routingImports } } } },
+      allow: { to: { element: { types: { anyOf: [...o.routingImports, ...extras] } } } },
     });
   }
   names.forEach((name, i) => {
@@ -137,7 +163,21 @@ export function buildPolicies(fsd, profile, opts = {}) {
     for (const lower of below) {
       policies.push({ from: { element: { type: name } }, allow: { to: target(lower) } });
     }
+    // Un-sliced and with no public API of their own, so they are reached
+    // directly rather than through target().
+    for (const extra of extras) {
+      policies.push({ from: { element: { type: name } }, allow: { to: { element: { type: extra } } } });
+    }
   });
+  // A non-layer root sits beside the bottom layer: it may reach that layer and
+  // its own kind, and nothing above. Granting it more would let a repo move code
+  // out of a layer to escape the layer graph.
+  for (const extra of extras) {
+    policies.push({ from: { element: { type: extra } }, allow: { to: { element: { type: bottom } } } });
+    for (const other of extras) {
+      policies.push({ from: { element: { type: extra } }, allow: { to: { element: { type: other } } } });
+    }
+  }
   return policies;
 }
 

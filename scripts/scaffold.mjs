@@ -2,7 +2,7 @@
 // Answers + stack profile -> files. Idempotent, and never overwrites a file it
 // did not write: a config that was already there is the repo's, and a merge is
 // the author's call, not ours. check.mjs reports the resulting state.
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "./lib/render.mjs";
@@ -92,6 +92,28 @@ if (shapeErrors.length) {
 
 const profile = loadProfile(root, stack);
 const fsd = JSON.parse(readFileSync(join(root, "modules/fsd/layers.json"), "utf8"));
+
+// Which directories sit under fsdRoot is repo-visible, so it is read rather than
+// asked -- the same treatment routingRoot gets. Without it every import into one
+// of them is an unknown dependency, and a repo whose lint runs with
+// --max-warnings 0 gets a config it cannot switch on. An explicit answer wins,
+// including `[]` for a repo that would rather see them reported.
+if (answers.extraRoots === undefined) {
+  const fsdRootName = profile.fsdRoot.replace(/\/+$/, "");
+  const fsdAbs = join(target, fsdRootName);
+  const known = new Set(fsd.layers.map((l) => l.name));
+  // A routingRoot inside fsdRoot (src/app, src/navigators) already has its own
+  // element registered ahead of the layers; listing it again would shadow it.
+  const routingParts = String(answers.routingRoot ?? profile.routingRoot ?? "").replace(/\/+$/, "").split("/").filter(Boolean);
+  if (routingParts[0] === fsdRootName && routingParts[1]) known.add(routingParts[1]);
+  answers.extraRoots = existsSync(fsdAbs)
+    ? readdirSync(fsdAbs, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !known.has(d.name) && !d.name.startsWith("."))
+        .map((d) => d.name)
+        .sort()
+    : [];
+}
+
 // Throws on an answer the layer graph does not allow. Loud beats a silent
 // fall back to the strict default, which would be reported as the repo's answer.
 const fsdOpts = resolveOptions(fsd, profile, answers);
@@ -224,6 +246,7 @@ put(".claude/harness/manifest.json", JSON.stringify({
     sliceCoupling: fsdOpts.sliceCoupling,
     routingRoot: fsdOpts.routingRoot,
     routingImports: fsdOpts.routingImports,
+    extraRoots: fsdOpts.extraRoots,
   },
   alias: { source: aliasSource, count: Object.keys(alias).length },
   files: manifestFiles,
@@ -271,6 +294,12 @@ put("package.json", JSON.stringify(pkg, null, indent) + trailingNewline);
 // it is invisible in `written` -- the line there says "CLAUDE.md: exists, left
 // alone", which reads like the harmless outcome it usually is.
 const notes = [];
+if (fsdOpts.extraRoots.length)
+  notes.push(
+    `${fsdOpts.extraRoots.length} directories under ${profile.fsdRoot} are not layers (${fsdOpts.extraRoots.join(", ")}). ` +
+      `Each is registered at the bottom of the graph: anything may import it, and it may import ` +
+      `${fsd.layers[fsd.layers.length - 1].name} and the others. Answer extraRoots to place them differently.`
+  );
 if (boundariesDropped)
   notes.push(
     `Q2 was answered but CLAUDE.md already existed, so no "## Safety Boundaries" section was written. ` +

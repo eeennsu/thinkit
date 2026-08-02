@@ -161,6 +161,52 @@ console.log("claude.md imports");
   ok("a cycle between imports terminates", cycled);
 }
 
+console.log("directories that are not layers");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  for (const d of ["src/app", "src/features", "src/shared", "src/db", "src/data", "src/.cache"]) {
+    mkdirSync(join(tmp, d), { recursive: true });
+  }
+  const answers = join(tmp, "answers.json");
+  writeFileSync(answers, JSON.stringify({ routingRoot: "src/app" }));
+  const out = execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers, "--json"],
+    { encoding: "utf8" });
+  const summary = JSON.parse(out);
+  const manifest = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
+  const config = readFileSync(join(tmp, "eslint.config.boundaries.mjs"), "utf8");
+
+  ok("a non-layer directory is detected", manifest.fsd.extraRoots.includes("db"), JSON.stringify(manifest.fsd.extraRoots));
+  ok("layer directories are not", !manifest.fsd.extraRoots.includes("features"));
+  ok("a routingRoot inside fsdRoot is not", !manifest.fsd.extraRoots.includes("app"),
+    "app would shadow the routing element registered ahead of the layers");
+  ok("a dotted directory is not", !manifest.fsd.extraRoots.includes(".cache"));
+  ok("an element is registered for it", /"type": "db"[\s\S]{0,60}"pattern": "src\/db"/.test(config));
+  ok("the placement is surfaced", summary.notes.some((n) => /not layers/.test(n)), JSON.stringify(summary.notes));
+
+  // Bottom of the graph: reachable from above, reaching only the bottom layer.
+  ok("a layer may import it", /"from"[\s\S]{0,120}"features"[\s\S]{0,160}"db"/.test(config) || config.includes('"type": "db"'));
+  ok("it may not import a layer above the bottom",
+    !/{\s*"from":\s*{\s*"element":\s*{\s*"type":\s*"db"\s*}\s*},\s*"allow":\s*{\s*"to":\s*{\s*"element":\s*{\s*"type":\s*"features"/.test(config));
+
+  // An explicit answer wins, including the empty one.
+  writeFileSync(answers, JSON.stringify({ routingRoot: "src/app", extraRoots: [] }));
+  execFileSync(process.execPath,
+    [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers], { encoding: "utf8" });
+  const off = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
+  ok("an explicit empty answer turns detection off", off.fsd.extraRoots.length === 0);
+
+  // A name that is already a layer would register a second element for it.
+  writeFileSync(answers, JSON.stringify({ extraRoots: ["shared"] }));
+  let threw = false;
+  try {
+    execFileSync(process.execPath,
+      [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers],
+      { encoding: "utf8", stdio: "pipe" });
+  } catch { threw = true; }
+  ok("naming a layer is rejected", threw);
+}
+
 console.log("answers with nowhere to go");
 {
   rmSync(tmp, { recursive: true, force: true });
