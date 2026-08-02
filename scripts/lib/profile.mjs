@@ -1,12 +1,12 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-// Merge rules, fixed on purpose:
-//   scalars  -> child overrides parent
-//   arrays   -> child replaces parent (never merged: merged arrays produce
-//               configs nobody can predict by reading either file)
-//   objects  -> shallow merge, one level
-//   extends  -> one level only
+// 병합 규칙, 일부러 고정했다.
+//   스칼라  -> 자식이 부모를 덮어쓴다
+//   배열    -> 자식이 부모를 교체한다 (절대 병합하지 않는다. 병합된 배열은 어느 파일을
+//             읽어도 예측할 수 없는 설정을 만든다)
+//   객체    -> 얕은 병합, 한 단계
+//   extends -> 한 단계만
 function merge(parent, child) {
   const out = { ...parent };
   for (const [k, v] of Object.entries(child)) {
@@ -22,38 +22,36 @@ function merge(parent, child) {
 
 export function loadProfile(root, stack) {
   const path = join(root, "stacks", stack, "profile.json");
-  if (!existsSync(path)) throw new Error(`unknown stack: ${stack}`);
+  if (!existsSync(path)) throw new Error(`모르는 스택: ${stack}`);
   const own = JSON.parse(readFileSync(path, "utf8"));
-  if (own.abstract) throw new Error(`stack "${stack}" is abstract and cannot be used directly`);
+  if (own.abstract) throw new Error(`스택 "${stack}"은(는) abstract라서 직접 쓸 수 없다`);
   if (!own.extends) return own;
   const parentPath = join(root, "stacks", own.extends, "profile.json");
   const parent = JSON.parse(readFileSync(parentPath, "utf8"));
-  if (parent.extends) throw new Error("extends is one level only");
+  if (parent.extends) throw new Error("extends는 한 단계만 된다");
   return merge(parent, own);
 }
 
-// The interview overlay for a stack, or null when it has none.
+// 스택의 인터뷰 오버레이, 없으면 null.
 //
-// The path is read from the profile rather than assumed from the directory
-// name, because the profile is what declares the overlay exists. A convention
-// nothing reads is not wiring: it made `questions` a field any stack could set
-// to anything with no effect, and made an overlay a stack forgot to declare
-// load anyway.
+// 경로는 디렉터리 이름에서 가정하지 않고 프로필에서 읽는다. 오버레이가 존재한다고
+// 선언하는 것이 프로필이기 때문이다. 아무도 읽지 않는 관례는 배선이 아니다. 그것은
+// `questions`를 어느 스택이든 아무 값이나 넣어도 아무 효과가 없는 필드로 만들었고,
+// 스택이 선언하기를 잊은 오버레이도 어차피 로드되게 만들었다.
 //
-// Returns the resolved absolute path. A declared path that is not on disk is an
-// error, not an absent overlay: silence there is a question set that stopped
-// being asked with nothing reporting it.
+// 해석된 절대 경로를 반환한다. 선언됐는데 디스크에 없는 경로는 부재한 오버레이가 아니라
+// 오류다. 거기서의 침묵은 아무도 보고하지 않은 채 안 묻게 된 질문 집합이다.
 export function questionsPath(root, stack) {
   const profile = loadProfile(root, stack);
   if (!profile.questions) return null;
   const abs = join(root, profile.questions);
   if (!existsSync(abs))
-    throw new Error(`stack "${stack}" declares questions: "${profile.questions}", which does not exist`);
+    throw new Error(`스택 "${stack}"이(가) questions: "${profile.questions}"를 선언했는데 그 파일이 없다`);
   return abs;
 }
 
-// Abstract profiles are excluded: they exist to be extended, and offering one
-// as a choice produces a run that loadProfile then refuses.
+// abstract 프로필은 제외한다. 확장되기 위해 존재하고, 선택지로 제시하면 loadProfile이
+// 곧바로 거부하는 실행을 만들어낸다.
 export function listStacks(root) {
   return readdirSync(join(root, "stacks"), { withFileTypes: true })
     .filter((d) => d.isDirectory())

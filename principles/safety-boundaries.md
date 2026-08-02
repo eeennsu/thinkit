@@ -1,27 +1,24 @@
-# Where strong constraints stay
+# 강한 제약이 남는 자리
 
-The general direction is to delete constraints and let the model use
-judgement. The exception is not "areas where the model is weak" — it is areas
-where the cost of being wrong is asymmetric: the action leaves the repo, or
-cannot be undone.
+전체 방향은 제약을 지우고 모델이 판단하게 두는 쪽이다. 예외는 "모델이 약한 영역"이
+아니라, 틀렸을 때의 대가가 비대칭인 영역이다. 행위가 레포 바깥으로 나가거나, 되돌릴
+수 없는 곳.
 
-Anthropic's guidance names the exception but does not enumerate it. Which
-areas apply to a given repo is not knowable from outside that repo, so this
-plugin asks instead of shipping a list.
+Anthropic의 지침은 예외가 있다고만 말하고 열거하지 않는다. 어떤 영역이 여기 해당하는지는
+그 레포 바깥에서 알 수 없으므로, 이 플러그인은 목록을 실어 나르지 않고 묻는다.
 
-Interview Q2 asks it directly. If the answer is empty, no `Safety Boundaries`
-section is written. An invented boundary is worse than none: it trains the
-reader to skim the section that was supposed to stop them.
+인터뷰 Q2가 그것을 직접 묻는다. 답이 비어 있으면 `안전 경계` 섹션을 쓰지 않는다.
+지어낸 경계는 없는 것보다 나쁘다. 자기를 멈춰 세우려던 섹션을 읽는 이가 훑고 지나가도록
+가르치기 때문이다.
 
-If the answer is not empty, the section states the boundary and the approval
-path, not a bare prohibition:
+답이 비어 있지 않으면, 섹션은 금지만이 아니라 경계와 승인 경로를 함께 진술한다.
 
 ```markdown
-## Safety Boundaries
+## 안전 경계
 
-- <action> requires explicit user approval before it runs.
-- <credential/asset> is never read, printed, or modified by an agent.
+- <행위>는 실행 전에 사용자의 명시적 승인이 필요하다.
+- <자격증명/자산>은 에이전트가 읽지도, 출력하지도, 수정하지도 않는다.
 ```
 
-An approval path is what makes the rule survivable. A rule with no path out
-gets worked around the first time it is wrong.
+승인 경로가 그 규칙을 견딜 만하게 만든다. 빠져나갈 길이 없는 규칙은 처음 틀렸을 때
+우회당한다.

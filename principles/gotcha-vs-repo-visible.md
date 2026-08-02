@@ -1,40 +1,36 @@
-# Gotcha vs repo-visible
+# Gotcha와 repo-visible
 
-The only question:
+질문은 하나뿐이다.
 
 ```
-Could the model work this out by reading the file system and the code?
-  yes -> repo-visible. Delete it.
-  no  -> gotcha. Keep it, and spend the tokens here.
+파일 시스템과 코드를 읽어서 모델이 알아낼 수 있는가?
+  그렇다 -> repo-visible. 지운다.
+  아니다 -> gotcha. 남기고, 토큰을 여기에 쓴다.
 ```
 
-Repo-visible is not a matter of degree. A directory tree, a file list, the
-language, the framework, the package manager, the test runner, the layer
-names, the dependency direction that a linter already enforces — all of it is
-one `ls` or one `cat package.json` away. Restating it costs attention budget
-and returns nothing.
+repo-visible은 정도의 문제가 아니다. 디렉터리 트리, 파일 목록, 언어, 프레임워크,
+패키지 매니저, 테스트 러너, 레이어 이름, 이미 린터가 강제하는 의존 방향 — 전부
+`ls` 한 번이나 `cat package.json` 한 번 거리에 있다. 다시 진술하면 주의 예산만 쓰고
+돌려주는 것이 없다.
 
-A gotcha is a fact that survives reading the code:
+gotcha는 코드를 읽고 나서도 남는 사실이다.
 
-- a decision whose reason is not in the repo ("types live in one file because
-  the codegen step rewrites it")
-- a trap that looks like a bug but is not, or vice versa
-- an invariant held by convention that nothing checks
-- something true of the environment, not the source
+- 이유가 레포 안에 없는 결정 ("코드젠 단계가 다시 쓰기 때문에 타입이 한 파일에 산다")
+- 버그처럼 보이지만 아닌 함정, 또는 그 반대
+- 관습으로 유지될 뿐 아무것도 검사하지 않는 불변식
+- 소스가 아니라 환경에 대해 참인 것
 
-## The structural / prose split
+## 구조 / 산문 분리
 
-`check.mjs` decides the structural cases and only those: fenced trees, runs of
-path-like lines, extension enumerations. Prose is left to judgement. There is
-no keyword blacklist — a framework name can appear legitimately inside a real
-gotcha, and a blacklist would delete the gotcha to catch the boilerplate.
+`check.mjs`는 구조적인 경우만 판정한다. 코드펜스 트리, 경로형 줄의 연속, 확장자 나열.
+산문은 판단에 맡긴다. 키워드 블랙리스트는 없다 — 진짜 gotcha 안에도 프레임워크 이름이
+정당하게 등장할 수 있고, 블랙리스트는 보일러플레이트를 잡으려다 gotcha를 지운다.
 
-## Applied to skills
+## 스킬에 적용할 때
 
-Same question, different subject: does this skill hold anything the model
-could not work out on its own? A skill that only says "verify your work" or
-"review carefully" is a procedure the model already runs. What survives is the
-part that is specific to this repo — the actual command, the gate that must
-not be skipped, the environment that has to be up first.
+같은 질문, 대상만 다르다. 이 스킬은 모델이 스스로 알아낼 수 없는 것을 담고 있는가?
+"작업을 검증하라"거나 "꼼꼼히 리뷰하라"만 말하는 스킬은 모델이 이미 돌리는 절차다.
+남는 것은 이 레포에 고유한 부분 — 실제 명령, 건너뛰면 안 되는 게이트, 먼저 떠 있어야
+하는 환경.
 
-If the answer is nothing, the right output is no skill.
+답이 없다면, 올바른 산출물은 스킬을 만들지 않는 것이다.

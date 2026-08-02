@@ -1,41 +1,40 @@
-# One rule, one owner
+# 규칙 하나에 소유자 하나
 
-A rule that lives in two places is a conflict waiting for its copies to drift.
-The cost is not that the agent breaks — it is that the agent must work out
-which instruction wins before it can start, and that reasoning is billed.
+두 곳에 사는 규칙은 사본이 어긋나기를 기다리는 충돌이다. 대가는 에이전트가 망가지는
+것이 아니라, 시작하기 전에 어느 지시가 이기는지부터 따져야 한다는 것이고, 그 추론에
+요금이 붙는다.
 
-| Kind of rule | Owner |
+| 규칙의 종류 | 소유자 |
 | --- | --- |
-| Task procedure (verification, review, release) | that skill |
-| Repo-specific prohibition or trap | CLAUDE.md |
-| How to call a tool | the tool description |
-| What this one request needs | the user prompt |
-| Detailed knowledge (architecture, contract, spec) | a reference file |
-| Anything a linter/type checker/hook/CI can decide | the tool config |
+| 작업 절차 (검증, 리뷰, 릴리스) | 그 스킬 |
+| 레포 고유의 금지나 함정 | CLAUDE.md |
+| 도구를 어떻게 호출하는가 | 그 도구의 description |
+| 이번 요청 하나에만 필요한 것 | 사용자 프롬프트 |
+| 상세 지식 (아키텍처, 계약, 명세) | 레퍼런스 파일 |
+| 린터·타입체커·훅·CI가 판정할 수 있는 것 | 그 도구의 설정 |
 
-If a rule appears in two rows, it is a conflict candidate.
+한 규칙이 두 행에 나타나면 충돌 후보다.
 
-## Test
+## 판정
 
-> If a person reading the harness cannot say which instruction wins,
-> the model cannot either.
+> 하네스를 읽은 사람이 어느 지시가 이기는지 말할 수 없다면,
+> 모델도 말할 수 없다.
 
-## Shape of a rule worth keeping
+## 남길 만한 규칙의 형태
 
-Keep rules that carry a condition and an escape hatch:
+조건과 빠져나갈 길을 함께 가진 규칙을 남긴다.
 
-- "Preserve existing public APIs unless the task requires an API change."
-- "Ask before introducing a new external dependency."
+- "작업이 API 변경을 요구하지 않는 한 기존 public API를 보존한다."
+- "새 외부 의존성을 들이기 전에 묻는다."
 
-Drop rules that claim to be true regardless of situation:
+상황과 무관하게 참이라고 주장하는 규칙은 버린다.
 
-- "NEVER create a new file."
-- "ALWAYS use protocol abstraction."
+- "절대 새 파일을 만들지 마라."
+- "항상 프로토콜 추상화를 써라."
 
-The difference is not strength. It is whether the rule admits the cases where
-it is wrong.
+차이는 강도가 아니다. 그 규칙이 틀리는 경우를 인정하느냐다.
 
-## Memory is not a rule
+## 기억은 규칙이 아니다
 
-Notes about what was done, when, and by whom belong in memory, not in
-CLAUDE.md. A standing fact stays; a log of past work goes.
+무엇을 언제 누가 했는지에 대한 메모는 CLAUDE.md가 아니라 메모리에 속한다. 상시 유효한
+사실은 남고, 지난 작업의 로그는 나간다.

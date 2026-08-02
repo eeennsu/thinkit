@@ -1,13 +1,12 @@
-# Architecture
+# 아키텍처
 
-The dependency direction is enforced by `boundaries/dependencies` in
-`eslint.config.boundaries.mjs`, generated from the layer graph and regenerated
-on every bootstrap. This file exists for the part the linter cannot hold: where
-the repo currently violates its own rule.
+의존 방향은 `eslint.config.boundaries.mjs`의 `boundaries/dependencies`가 강제한다. 그
+파일은 레이어 그래프에서 생성되고 bootstrap마다 다시 생성된다. 이 파일은 린터가 붙들 수
+없는 부분을 위해 있다. 레포가 지금 자기 규칙을 어기는 자리.
 
-## Exceptions
+## 예외
 
 {{exceptions}}
 
-New code does not inherit these. They are recorded so that reading the
-existing code does not teach the wrong convention.
+새 코드는 이것들을 물려받지 않는다. 기존 코드를 읽고 잘못된 관례를 배우지 않도록
+기록해 둔 것이다.

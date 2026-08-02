@@ -1,23 +1,22 @@
-# Calibration notes (not wired)
+# 캘리브레이션 메모 (배선되지 않음)
 
-Generation-dependent observations with no consumer in any skill or script.
-They are recorded here rather than in `calibration/` so that the calibration
-files stay honest: everything in there is read by something.
+세대에 의존하지만 어떤 스킬이나 스크립트도 소비하지 않는 관찰들. `calibration/`이 아니라
+여기 기록해서 캘리브레이션 파일이 정직하게 남게 한다. 거기 있는 것은 전부 무언가가 읽는다.
 
-If one of these acquires a consumer, move it into `calibration/claude-5.md`
-with its source. Until then it is background reading.
+이 중 하나가 소비자를 얻으면 출처와 함께 `calibration/claude-5.md`로 옮긴다. 그 전까지는
+배경 지식이다.
 
-| Axis | 2025 position [ECE] | 2026 position [NR]/[P5] |
+| 축 | 2025년 위치 [ECE] | 2026년 위치 [NR]/[P5] |
 | --- | --- | --- |
-| Rule ↔ judgement dial | "right altitude" defined, mid-scale | moved far toward judgement |
-| Reference complexity ceiling | file identifiers, metadata as signal | HTML artifacts, test suites, rubrics with verifier agents |
-| Prompt formatting formality | "likely becoming less important" | not restated |
-| Instruction position bias | — | older models favoured late instructions; no longer needed |
-| Effective context budget | context rot stressed; bigger windows are not the answer | 1M window, consistent throughout |
-| Effort defaults | — | low/medium liberally; re-run an effort sweep rather than carrying defaults over |
-| Thinking-disabled artifacts | — | tool calls leaking as text, internal XML tags |
+| 규칙 ↔ 판단 다이얼 | "right altitude"를 정의, 중간 눈금 | 판단 쪽으로 멀리 이동 |
+| 레퍼런스 복잡도 상한 | 파일 식별자, 신호로서의 메타데이터 | HTML 아티팩트, 테스트 스위트, 검증 에이전트가 딸린 루브릭 |
+| 프롬프트 형식의 격식 | "likely becoming less important" | 다시 언급되지 않음 |
+| 지시 위치 편향 | — | 옛 모델은 뒤쪽 지시를 선호했으나 이제 필요 없음 |
+| 실효 컨텍스트 예산 | 컨텍스트 부패를 강조, 창이 커지는 것이 답은 아니라고 함 | 1M 창, 전 구간에서 일관 |
+| effort 기본값 | — | low/medium을 넉넉히 쓰고, 기본값을 물려주는 대신 effort 스윕을 다시 돌린다 |
+| thinking 비활성 시의 부산물 | — | 도구 호출이 텍스트로 새는 것, 내부 XML 태그 |
 
-The last two are prompt-layer, not context-layer. They would belong to a
-harness that owns its own system prompt, which this plugin does not.
+마지막 둘은 컨텍스트 층이 아니라 프롬프트 층이다. 자기 시스템 프롬프트를 소유하는
+하네스에 속하는 것이고, 이 플러그인은 그것을 소유하지 않는다.
 
-Sources: `docs/references/01`, `02`, `04`.
+출처: `docs/references/01`, `02`, `04`.

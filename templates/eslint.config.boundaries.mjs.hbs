@@ -1,8 +1,8 @@
-// Generated from modules/fsd/layers.json. Do not hand-edit: the layer graph has
-// one owner, edits here are invisible to it, and an edited file stops being
-// refreshed - which freezes the policies at whatever they were that day.
-// Your own rules go in eslint.config.mjs, which imports this file.
-// Regenerate with:  /harness-bootstrap {{stack}}
+// modules/fsd/layers.json에서 생성됨. 손으로 고치지 않는다. 레이어 그래프에는 소유자가
+// 하나이고, 여기서의 편집은 그쪽에 보이지 않으며, 편집된 파일은 갱신이 멈춘다 —
+// 그러면 정책이 그날 상태로 얼어붙는다.
+// 당신의 규칙은 이 파일을 import하는 eslint.config.mjs에 넣는다.
+// 다시 생성하려면:  /harness-bootstrap {{stack}}
 import boundaries from 'eslint-plugin-boundaries';
 
 export default [
@@ -18,14 +18,14 @@ export default [
         '{{severity}}',
         {
           default: 'disallow',
-          // Order is fixed for a stable diff. Every entry below is an allow, so
-          // order does not change the outcome today; a disallow added later must
-          // come last, because the last matching policy wins.
+          // diff를 안정시키려고 순서를 고정한다. 아래 항목은 전부 허용이라 오늘은
+          // 순서가 결과를 바꾸지 않는다. 나중에 더하는 금지는 맨 끝에 와야 한다.
+          // 마지막으로 매칭된 정책이 이기기 때문이다.
           policies: {{policiesJson}},
         },
       ],
-      // Turned on so an unresolved alias fails loudly instead of silently
-      // passing every boundary check.
+      // 풀리지 않은 alias가 모든 경계 검사를 조용히 통과하는 대신 시끄럽게 실패하도록
+      // 켜 둔다.
       'boundaries/no-unknown-dependencies': '{{severity}}',
     },
   },

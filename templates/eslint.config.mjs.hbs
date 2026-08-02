@@ -1,38 +1,37 @@
-// Entry config. This file is yours: add plugins, rules and overrides here.
+// 진입 설정. 이 파일은 당신 것이다. 플러그인, 규칙, 오버라이드를 여기 더한다.
 //
-// A re-bootstrap refreshes it only while it is still byte-identical to what was
-// written; once you edit it, it is left alone. The boundary policies regenerate
-// either way, because they live in eslint.config.boundaries.mjs and this file
-// only spreads them in. That split exists so that adding one rule of your own
-// does not freeze the layer graph.
+// 다시 bootstrap하면 이 파일은 쓰인 그대로 바이트가 같을 때만 갱신된다. 한 번 편집하면
+// 그대로 둔다. 경계 정책은 어느 쪽이든 다시 생성된다. 그것들은 eslint.config.boundaries.mjs에
+// 살고 이 파일은 펼쳐 넣기만 하기 때문이다. 그 분리는 당신의 규칙 하나를 더하는 것이
+// 레이어 그래프를 얼리지 않게 하려고 있다.
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import boundaries from './eslint.config.boundaries.mjs';
 
 export default [
-  // Parser and plugin registration, no rules of its own. Without it eslint reads
-  // .ts/.tsx with the default parser and dies on the first type annotation - and
-  // the boundaries block below claims to cover ts and tsx.
-  // A single config object, unlike `configs.recommended`, which is an array.
+  // 파서와 플러그인 등록. 자기 규칙은 없다. 이것이 없으면 eslint가 .ts/.tsx를 기본
+  // 파서로 읽다가 첫 타입 표기에서 죽는다 — 그리고 아래 boundaries 블록은 ts와 tsx를
+  // 덮는다고 주장한다.
+  // 배열인 `configs.recommended`와 달리 설정 객체 하나다.
   tseslint.configs.base,
   ...boundaries,
   {
     files: ['**/*.{ts,tsx,js,jsx}'],
     plugins: { 'react-hooks': reactHooks },
-    // Named one at a time rather than pulled in through a shared `recommended`.
-    // A preset grows on a minor bump, and rules nobody here agreed to are rules
-    // somebody turns off in a hurry - taking the ones that were working with them.
+    // 공유 `recommended`로 끌어오지 않고 하나씩 이름을 댄다. 프리셋은 마이너 업그레이드에
+    // 자라고, 여기 아무도 동의하지 않은 규칙은 누군가 급히 끄는 규칙이다 — 잘 돌던
+    // 것들까지 데리고.
     rules: {
-      // Correctness, not taste. A hook called conditionally and a stale dependency
-      // array are both bugs that read as working code.
+      // 취향이 아니라 정확성. 조건부로 호출된 훅과 낡은 의존성 배열은 둘 다 동작하는
+      // 코드처럼 읽히는 버그다.
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      // Debug output outlives the reason it was added. Warn rather than error:
-      // a script or a CLI entry point has a legitimate use for it.
+      // 디버그 출력은 그것을 더한 이유보다 오래 산다. error가 아니라 warn인 이유는
+      // 스크립트나 CLI 진입점에는 정당한 쓰임이 있기 때문이다.
       'no-console': 'warn',
-      // `_` is the escape hatch, and it is the reason this is configured at all.
-      // Without one, a required-but-unused callback argument has nowhere to go
-      // and the rule gets argued with instead of obeyed.
+      // `_`가 탈출구이고, 이 규칙을 설정하는 이유 자체가 그것이다. 탈출구가 없으면
+      // 필요하지만 안 쓰이는 콜백 인자가 갈 곳이 없고, 규칙은 지켜지는 대신 논쟁거리가
+      // 된다.
       '@typescript-eslint/no-unused-vars': [
         'warn',
         {

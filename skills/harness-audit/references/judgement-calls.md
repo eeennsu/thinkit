@@ -1,57 +1,50 @@
-# Judgement calls
+# 판단이 필요한 것들
 
-What a script cannot decide, and how to decide it.
+스크립트가 판정할 수 없는 것, 그리고 그것을 어떻게 판정하는가.
 
-## Does this instruction duplicate something the model already does?
+## 이 지시는 모델이 이미 하는 일을 되풀이하는가?
 
-Calibrated by `model_defaults`. Under the current calibration the model
-verifies its own work, corrects its own mistakes, and narrates readily.
+`model_defaults`로 캘리브레이션된다. 현재 캘리브레이션에서 모델은 자기 작업을 스스로
+검증하고, 자기 실수를 스스로 고치고, 묻지 않아도 서술한다.
 
 ```
-Would the model do this without the instruction?
-  no                      -> keep it
-  yes                     -> delete it. Overlap does not cancel, it compounds
-  the default is opposite -> write the instruction that is missing
+지시가 없어도 모델이 이것을 했겠는가?
+  아니다        -> 남긴다
+  그렇다        -> 지운다. 겹침은 상쇄되지 않고 누적된다
+  기본값이 반대다 -> 빠져 있는 지시를 쓴다
 ```
 
-The last branch is the one an audit usually misses. Response length, document
-length, narration, task scope and delegation all run wider than wanted by
-default, so the fix is an added instruction, not a deleted one. An audit that
-only ever deletes has read half the calibration.
+마지막 갈래가 감사에서 보통 놓치는 것이다. 응답 길이, 문서 길이, 서술, 작업 범위,
+위임 모두 기본값이 원하는 것보다 넓게 도므로, 고치는 방법은 지시를 지우는 것이 아니라
+더하는 것이다. 지우기만 하는 감사는 캘리브레이션을 절반만 읽은 것이다.
 
-The `phrases` list in the calibration is where to start looking, not the
-verdict. Judge the sentence in place: "run the smoke test before claiming the
-migration worked" names a repo-specific gate and survives; "include a final
-verification step for any non-trivial task" is the model's own behaviour
-written down twice and does not.
+캘리브레이션의 `phrases` 목록은 찾기 시작할 자리이지 판결이 아니다. 문장을 그 자리에서
+판단한다. "마이그레이션이 됐다고 말하기 전에 스모크 테스트를 돌려라"는 레포 고유의
+게이트를 지목하므로 살아남고, "사소하지 않은 작업에는 최종 검증 단계를 포함하라"는
+모델 자신의 행동을 두 번 적은 것이라 살아남지 못한다.
 
-## Is this a review cutoff?
+## 이것은 리뷰 컷오프인가?
 
-Calibrated by `review_instruction_form`. Look for anything that tells a
-reviewer to report less: severity floors, "be conservative", "only flag real
-problems", caps on the number of findings.
+`review_instruction_form`으로 캘리브레이션된다. 리뷰어에게 덜 보고하라고 말하는 것을
+찾는다. 심각도 하한선, "보수적으로 하라", "진짜 문제만 지적하라", 발견 개수 상한.
 
-Ordering is not a cutoff. "Correctness first, then regression risk" ranks
-findings; "only report high-severity" removes them. Ranking is safe; removal
-is the error.
+순서 매기기는 컷오프가 아니다. "정확성 먼저, 그다음 회귀 위험"은 발견을 정렬하고,
+"높은 심각도만 보고"는 발견을 없앤다. 정렬은 안전하고, 제거가 오류다.
 
-Where to look: review skills, PR-review prompts, agent definitions, CI
-instructions. Not only CLAUDE.md.
+찾을 곳: 리뷰 스킬, PR 리뷰 프롬프트, 에이전트 정의, CI 지시. CLAUDE.md만이 아니다.
 
-## Is this rule owned in more than one place?
+## 이 규칙은 두 곳 이상에서 소유되는가?
 
-Quote both copies with file and line. Two copies drift, and the reader has to
-work out which one wins before starting.
+두 사본을 파일과 줄 번호와 함께 인용한다. 사본 둘은 어긋나고, 읽는 사람은 시작하기 전에
+어느 쪽이 이기는지부터 따져야 한다.
 
-Naming the owner is the fix, not deleting the weaker copy at random — see
-`principles/ownership-map.md` for the map.
+고치는 방법은 약한 사본을 아무렇게나 지우는 것이 아니라 소유자를 지목하는 것이다 —
+지도는 `principles/ownership-map.md`에 있다.
 
-## Could a tool decide this?
+## 도구가 이것을 판정할 수 있는가?
 
-If a linter, formatter, type checker, hook, permission setting, or CI job
-could enforce it, the sentence should not exist. Say which tool, and check
-whether the repo already runs it.
+린터·포매터·타입체커·훅·권한 설정·CI가 강제할 수 있다면 그 문장은 존재하면 안 된다.
+어느 도구인지 말하고, 레포가 이미 그것을 돌리고 있는지 확인한다.
 
-One exception, and it is narrow: a rule that a tool enforces only partially
-must not be deleted from the docs on the strength of the part that works. Half
-enforcement plus full deletion reads to everyone as full coverage.
+예외는 하나뿐이고 좁다. 도구가 부분적으로만 강제하는 규칙을, 작동하는 쪽만 믿고
+문서에서 지우면 안 된다. 절반 강제 더하기 통째 삭제는 모두에게 완전한 커버리지로 읽힌다.

@@ -1,12 +1,12 @@
 ---
-description: Audit an existing repo harness against the principles
+description: 기존 레포 하네스를 원칙에 비추어 감사한다
 argument-hint: [--fix]
 ---
 
-Run the `harness-audit` skill.
+`harness-audit` 스킬을 실행한다.
 
-Report every finding, sorted by severity. Do not suppress low-severity ones —
-filtering is the reader's pass, not yours.
+발견은 전부 보고하고 심각도 순으로 정렬한다. 낮은 심각도를 눌러 없애지 않는다 —
+필터링은 읽는 사람의 패스이지 네 것이 아니다.
 
-With `--fix`, apply only findings whose remedy is mechanical (a missing
-section, an unregistered script). Never auto-edit prose.
+`--fix`를 쓰면 처치가 기계적인 발견만 적용한다 (빠진 섹션, 등록되지 않은 스크립트).
+산문은 절대 자동으로 고치지 않는다.

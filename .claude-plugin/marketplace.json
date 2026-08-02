@@ -8,7 +8,7 @@
     {
       "name": "thinkit",
       "source": "./",
-      "description": "Harness bootstrap and audit. Ships questions, not answers."
+      "description": "하네스 bootstrap과 감사. 답이 아니라 질문을 배포한다."
     }
   ]
 }

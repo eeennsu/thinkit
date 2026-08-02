@@ -1,6 +1,6 @@
 {
   "name": "thinkit",
-  "description": "Sets up a repo harness by asking what only the repo owner can answer.",
+  "description": "레포 소유자만 답할 수 있는 것을 물어서 레포 하네스를 세운다.",
   "version": "0.2.0",
   "author": {
     "name": "eeennsu",

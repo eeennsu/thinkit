@@ -7,7 +7,7 @@
     "name": "typescript",
     "settings": { "typescript": { "alwaysTryTypes": true } },
     "devDependency": "eslint-import-resolver-typescript",
-    "why": "Aliases come from tsconfig paths."
+    "why": "alias는 tsconfig paths에서 온다."
   },
   "devDependencies": {
     "eslint": "^9",

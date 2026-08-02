@@ -1,92 +1,81 @@
 ---
 name: harness-bootstrap
-description: Use when setting up a repo harness (CLAUDE.md, skills, references, lint boundaries) for a new or unconfigured repository, given a stack name.
+description: 스택 이름을 받아 새 레포나 설정되지 않은 레포의 하네스(CLAUDE.md, 스킬, 레퍼런스, 린트 경계)를 세울 때 쓴다.
 ---
 
-# Harness bootstrap
+# 하네스 bootstrap
 
-This plugin does not write someone else's harness for them. It asks the
-questions whose answers cannot be found in the repo, then turns the answers
-into files and lint rules.
+이 플러그인은 남의 하네스를 대신 써주지 않는다. 레포를 읽어서는 답을 찾을 수 없는
+질문을 하고, 그 답을 파일과 린트 규칙으로 바꾼다.
 
-## Order
+## 순서
 
-1. **Resolve the stack.** `${CLAUDE_PLUGIN_ROOT}/stacks/<stack>/profile.json`.
-   Refuse abstract profiles. If the argument is missing, list the non-abstract
-   stacks and ask.
-2. **Read what is already there** — `package.json`, existing config, whether
-   the repo has code yet, how its imports are actually written, where routes
-   are registered. This sets the defaults for Q4, Q6 and Q7, and supplies
-   `routingRoot` outright. Do not ask about anything you can read; do confirm
-   what you read before it becomes a rule.
-3. **Interview.** `references/interview.md`. Seven questions, each tagged with
-   why it exists. Skip a question only for the reason its own entry gives.
+1. **스택을 확정한다.** `${CLAUDE_PLUGIN_ROOT}/stacks/<stack>/profile.json`.
+   abstract 프로필은 거부한다. 인자가 없으면 abstract가 아닌 스택들을 나열하고 묻는다.
+2. **이미 있는 것을 읽는다** — `package.json`, 기존 설정, 레포에 코드가 있는지,
+   import를 실제로 어떻게 쓰는지, 라우트가 어디에 등록되는지. 이것이 Q4·Q6·Q7의 기본값을
+   정하고 `routingRoot`를 통째로 공급한다. 읽어서 알 수 있는 것은 묻지 않는다. 다만 읽은
+   것이 규칙이 되기 전에 확인은 받는다.
+3. **인터뷰.** `references/interview.md`. 일곱 개 질문, 각각 존재 이유가 붙어 있다.
+   질문을 건너뛰는 것은 그 항목 자신이 대는 이유일 때만이다.
 4. **Scaffold.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" <stack> --target <repo> --answers <file>`.
 5. **Check.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs" --mode full --target <repo>`.
 6. **Report.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" <stack> --target <repo>`.
 
-Steps 4-6 are scripts, not instructions to the model. That is deliberate: a
-rule a tool can enforce does not belong in prose, and that includes the rule
-that says to verify the output.
+4~6단계는 모델에게 내리는 지시가 아니라 스크립트다. 일부러 그렇게 했다. 도구가 강제할 수
+있는 규칙은 산문에 속하지 않고, 여기엔 산출물을 검증하라는 규칙도 포함된다.
 
-The scripts live with the plugin and the working directory is the repo being
-set up, so they are always addressed through `${CLAUDE_PLUGIN_ROOT}`. A relative
-path here resolves against the target repo, where these files do not exist.
+스크립트는 플러그인과 함께 살고 작업 디렉터리는 설정 대상 레포이므로, 항상
+`${CLAUDE_PLUGIN_ROOT}`로 주소를 잡는다. 여기서 상대 경로는 대상 레포를 기준으로 풀리고,
+거기엔 이 파일들이 없다.
 
-## What comes out, and what does not
+## 무엇이 나오고, 무엇이 나오지 않는가
 
-Written every time: two lint configs, tsconfig, formatter, CLAUDE.md with an
-empty Gotchas section, and the planted checker registered as
-`npm run harness:check`.
+매번 쓰이는 것: 린트 설정 두 개, tsconfig, 포매터, 빈 함정 섹션이 든 CLAUDE.md, 그리고
+`npm run harness:check`로 등록된 심어진 체커.
 
-Layer directories are written **only into a repo with no code under `fsdRoot`**.
-On an empty repo they are the point — a layer graph with nowhere to put anything
-is a document. On a repo that already has code, `src/entities/.gitkeep` for a
-layer that repo never had is a directory nobody asked for, and the policies do
-not need it to exist. The absent layers are named in the report instead.
+레이어 디렉터리는 **`fsdRoot` 아래에 코드가 없는 레포에만** 만든다. 빈 레포에서는 그것이
+요점이다 — 무엇을 놓을 자리도 없는 레이어 그래프는 문서다. 이미 코드가 있는 레포에서는
+그 레포가 가진 적 없는 레이어의 `src/entities/.gitkeep`이 아무도 요청하지 않은 디렉터리이고,
+정책은 그것이 존재해야 돌아가지 않는다. 없는 레이어는 대신 보고서에 이름이 오른다.
 
-`package.json` gets three scripts — `harness:check`, `lint`, `format` — and the
-missing dev dependencies. `format` is not a convenience: the generated import
-order is a rule the report counts as enforced, and a formatter no command runs
-enforces nothing. An existing script or version pin of the repo's own is never
-replaced, and the file keeps its own indentation and key order.
+`package.json`에는 스크립트 세 개 — `harness:check`, `lint`, `format` — 와 빠진 개발
+의존성이 들어간다. `format`은 편의가 아니다. 생성된 import 순서는 보고서가 강제된 것으로
+세는 규칙이고, 아무 명령도 부르지 않는 포매터는 아무것도 강제하지 않는다. 레포가 가진
+스크립트나 버전 고정은 절대 교체하지 않고, 파일은 자기 들여쓰기와 키 순서를 지킨다.
 
-The lint config is two files on purpose. `eslint.config.boundaries.mjs` holds the
-generated boundary policies and is regenerated on every run;
-`eslint.config.mjs` spreads it in and is the repo's to edit. Report it that way.
-A repo told it owns one file and then finding its layer graph frozen after one
-added rule is the failure this split exists to prevent.
+린트 설정이 두 파일인 것은 의도다. `eslint.config.boundaries.mjs`는 생성된 경계 정책을
+담고 실행마다 다시 생성된다. `eslint.config.mjs`는 그것을 펼쳐 넣고 레포가 편집할 몫이다.
+보고할 때도 그렇게 말한다. 파일 하나를 소유한다고 들은 레포가 규칙 하나 더했다가 레이어
+그래프가 얼어붙은 것을 발견하는 것 — 이 분리는 그 실패를 막으려고 있다.
 
-Written only where nothing is in the way. A file already on disk that this
-plugin did not write is left alone and reported as `exists, left alone` — a
-repo's own `babel.config.js` or `CLAUDE.md` is not ours to replace. The
-manifest records what we wrote, so a re-run refreshes those and nothing else.
+아무것도 가로막지 않는 자리에만 쓴다. 이 플러그인이 쓰지 않은 파일이 이미 디스크에 있으면
+건드리지 않고 `exists, left alone`으로 보고한다 — 레포 자신의 `babel.config.js`나
+`CLAUDE.md`는 우리가 교체할 것이 아니다. 매니페스트가 우리가 쓴 것을 기록하므로, 다시
+돌리면 그것들만 갱신되고 나머지는 그대로다.
 
-Written only if an answer calls for it:
+답이 요구할 때만 쓰는 것:
 
-| Artifact | Answer key | Condition |
+| 산출물 | 답변 키 | 조건 |
 | --- | --- | --- |
-| `## Safety Boundaries` in CLAUDE.md | `safetyBoundaries` | Q2 is non-empty |
-| `.claude/references/architecture.md` | `exceptions` | Q5 is non-empty |
-| `.claude/skills/verification/SKILL.md` | `verification` | Q3 is non-empty |
+| CLAUDE.md의 `## 안전 경계` | `safetyBoundaries` | Q2가 비어 있지 않을 때 |
+| `.claude/references/architecture.md` | `exceptions` | Q5가 비어 있지 않을 때 |
+| `.claude/skills/verification/SKILL.md` | `verification` | Q3가 비어 있지 않을 때 |
 
-Q3 is itself calibrated: it is asked only while the calibration says the model
-verifies its own work, because that is what makes repo-specific facts the only
-part worth writing down. If a generation ever stops self-verifying, Q3 drops
-and this skill is not proposed at all — the replacement is a different
-question, not this one with a wider condition.
+Q3 자체가 캘리브레이션된다. 모델이 자기 작업을 스스로 검증한다고 캘리브레이션이 말하는
+동안에만 묻는데, 그것이 레포 고유의 사실만 적을 값어치가 있게 만들기 때문이다. 어떤 세대가
+자기 검증을 멈추면 Q3는 탈락하고 이 스킬은 아예 제안되지 않는다 — 대체물은 조건을 넓힌
+같은 질문이 아니라 다른 질문이다.
 
-If those answers are empty, the artifacts are not created. That is the correct
-outcome, not a gap to fill.
+그 답들이 비어 있으면 산출물은 만들지 않는다. 그것이 올바른 결과이지 채워야 할 구멍이
+아니다.
 
-## The report is the deliverable
+## 보고서가 산출물이다
 
-On a new repo, CLAUDE.md comes out nearly empty: no gotchas exist yet, and
-every rule a linter can hold has been moved into the linter. The value is in
-the generated configuration, so the report says exactly what was produced and
-what is now enforced, with the unit for each number.
+새 레포에서 CLAUDE.md는 거의 비어서 나온다. 아직 함정이 없고, 린터가 붙들 수 있는 규칙은
+전부 린터로 옮겼기 때문이다. 값어치는 생성된 설정에 있으므로, 보고서는 무엇이 만들어졌고
+무엇이 지금 강제되는지를 숫자마다 단위와 함께 정확히 말한다.
 
-Never report a boundary count that `tests/verify-boundaries.mjs` has not
-confirmed on this stack **and this pair of variants**. The variants change the
-generated policies, so a count confirmed under the strict pair says nothing
-about a repo that answered otherwise.
+`tests/verify-boundaries.mjs`가 이 스택 **그리고 이 변형 쌍**에서 확인하지 않은 경계 개수는
+절대 보고하지 않는다. 변형이 생성된 정책을 바꾸므로, 엄격한 쌍에서 확인한 개수는 다르게
+답한 레포에 대해 아무것도 말해주지 않는다.

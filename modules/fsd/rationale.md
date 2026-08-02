@@ -1,65 +1,60 @@
-# FSD: what the tool decides, and what it does not
+# FSD: 도구가 정하는 것, 정하지 않는 것
 
-The layer graph in `layers.json` is the only place the decision lives. The
-ESLint config is derived from it — never hand-written — so the two cannot
-drift.
+`layers.json`의 레이어 그래프가 그 결정이 사는 유일한 자리다. ESLint 설정은 거기서
+파생되고 — 손으로 쓰지 않는다 — 그래서 둘은 어긋날 수 없다.
 
-## Enforced (verified by fixtures)
+## 강제됨 (픽스처로 확인)
 
-| Constraint | How | Variant |
+| 제약 | 방법 | 변형 |
 | --- | --- | --- |
-| Layer direction | `boundaries/dependencies`, `default: "disallow"` plus one allow per downward pair | none — always on |
-| Slice isolation | falls out of the default: each slice is its own element, and `checkInternals` is false, so `features/a -> features/b` matches no allow | `sliceCoupling` |
-| Public API | the allow targets `fileInternalPath: index.*`, so a deep import matches no allow | `publicApi` |
+| 레이어 방향 | `boundaries/dependencies`, `default: "disallow"` 더하기 아래 방향 쌍마다 허용 하나 | 없음 — 항상 켜짐 |
+| 슬라이스 격리 | 기본값에서 따라 나온다. 각 슬라이스가 자기 요소이고 `checkInternals`가 false이므로 `features/a -> features/b`는 어떤 허용에도 걸리지 않는다 | `sliceCoupling` |
+| Public API | 허용이 `fileInternalPath: index.*`를 겨냥하므로 깊은 import는 어떤 허용에도 걸리지 않는다 | `publicApi` |
 
-`npm run harness:check` does not test these. The fixtures under `tests/`
-do, and the count reported by `report.mjs` is only claimable after they pass —
-for the stack *and* the variant pair, since a variant is a different config.
+`npm run harness:check`는 이것들을 시험하지 않는다. `tests/` 아래 픽스처가 하고,
+`report.mjs`가 보고하는 개수는 그것들이 통과한 뒤에만 주장할 수 있다 — 그 스택 *그리고*
+그 변형 쌍에 대해서. 변형이 다르면 다른 설정이기 때문이다.
 
-## The two axes, and the one that is not
+## 두 개의 축, 그리고 축이 아닌 것 하나
 
-`layers.json` declares `variants`. A repo answers them; a stack does not, so
-two repos on the same stack can differ.
+`layers.json`이 `variants`를 선언한다. 레포가 답하고 스택은 답하지 않으므로, 같은 스택의
+두 레포가 다를 수 있다.
 
-`publicApi: open` drops `fileInternalPath` from every allow. `sliceCoupling:
-same-layer` adds one self-allow per sliced layer — isolation is the absence of
-a policy, so permitting it takes an explicit one. That self-allow still goes
-through the same target builder, or `same-layer` would hand a sibling the deep
-import that `enforced` denies everyone else.
+`publicApi: open`은 모든 허용에서 `fileInternalPath`를 뺀다. `sliceCoupling: same-layer`는
+슬라이스가 있는 레이어마다 자기 허용을 하나 더한다 — 격리는 정책의 부재이므로 허용하려면
+명시적인 정책이 필요하다. 그 자기 허용도 같은 타깃 빌더를 거친다. 안 그러면 `same-layer`가
+`enforced`는 다른 모두에게 막는 깊은 import를 형제에게 건네준다.
 
-Layer direction is not an axis. It is what is left when both answers are the
-loosest, and the fixture for it is expected to fail under every combination.
+레이어 방향은 축이 아니다. 두 답이 가장 느슨할 때 남는 것이고, 그것을 위한 픽스처는 모든
+조합에서 실패하도록 기대된다.
 
-The axes exist because the alternative was worse in both directions: a repo
-built without slice public APIs reports every import it has under the strict
-config, and the rule gets disabled within the day — enforcing nothing while
-the report claims four layers of public API. The looser config enforces less
-and says so. A number that overstates is not a stricter number.
+축이 존재하는 이유는 대안이 양쪽 다 더 나빴기 때문이다. 슬라이스 public API 없이 지어진
+레포는 엄격한 설정에서 자기 import를 전부 보고받고, 규칙은 그날 안에 꺼진다 — 아무것도
+강제하지 않으면서 보고서는 public API 레이어 네 개를 주장한다. 느슨한 설정은 덜 강제하고
+그렇다고 말한다. 과장하는 숫자는 더 엄격한 숫자가 아니다.
 
-## Judgement, not enforced
+## 판단, 강제하지 않음
 
-The tool decides whether an import crosses a boundary. It cannot decide
-whether the boundary was drawn in the right place. These stay with the reader:
+도구는 import가 경계를 넘는지를 판정한다. 경계가 옳은 자리에 그어졌는지는 판정할 수 없다.
+다음은 읽는 사람에게 남는다.
 
-- **Which slice a thing belongs to.** A "feature" that only holds data
-  probably belongs in `entities`; the linter is happy either way.
-- **When a shared helper has earned its place.** `shared` accepts everything
-  from above, which makes it the default dumping ground.
-- **Whether a widget is a widget.** The layer between `screens` and
-  `features` is the one that erodes first.
+- **어떤 슬라이스에 속하는가.** 데이터만 담은 "feature"는 아마 `entities`에 속한다.
+  린터는 어느 쪽이든 만족한다.
+- **공용 헬퍼가 그 자리를 벌었는가.** `shared`는 위에서 오는 모든 것을 받으므로 기본
+  쓰레기장이 된다.
+- **위젯이 위젯인가.** `screens`와 `features` 사이의 레이어가 가장 먼저 무너진다.
 
-## Deliberately out of scope in v1
+## v1에서 의도적으로 범위 밖
 
-**Cross-import between slices of the same layer (`@x`).** FSD has a sanctioned
-escape hatch for entity-to-entity references, scoped to a declared surface. We
-do not model it. `sliceCoupling: same-layer` is not that hatch — it is the
-blunt version, on for the whole layer, with no record of which slice meant to
-expose what. It exists because a repo that already cross-imports everywhere
-needs a config that describes it; a repo choosing between them should choose
-`isolated`. Model `@x` when a repo needs the scoped form, not before.
+**같은 레이어 슬라이스 간 cross-import (`@x`).** FSD에는 엔티티 사이 참조를 위한 공인된
+탈출구가 있고, 선언된 표면으로 범위가 제한된다. 우리는 그것을 모델링하지 않는다.
+`sliceCoupling: same-layer`는 그 탈출구가 아니다 — 레이어 전체에 켜지고 어느 슬라이스가
+무엇을 노출하려 했는지 기록이 없는, 뭉툭한 버전이다. 이미 여기저기 cross-import하는
+레포에게 그것을 서술하는 설정이 필요하기 때문에 있는 것이고, 둘 중에 고르는 레포라면
+`isolated`를 골라야 한다. 범위가 제한된 형태가 실제로 필요한 레포가 생기면 그때 `@x`를
+모델링한다. 그 전에는 아니다.
 
-**Segment rules (`ui` / `model` / `api` / `lib`).** These look expressible:
-segments are a capturable path level, so a policy could constrain them.
-Excluded anyway. Segment layout is a convention with real exceptions, and a
-rule that fires on correct code teaches people to disable the rule. This is a
-"possible but not done" entry, not a "cannot" one.
+**세그먼트 규칙 (`ui` / `model` / `api` / `lib`).** 표현 가능해 보인다. 세그먼트는 캡처할
+수 있는 경로 레벨이라 정책으로 제약할 수 있다. 그래도 제외한다. 세그먼트 배치는 실제
+예외가 있는 관례이고, 올바른 코드에 걸리는 규칙은 사람들에게 규칙을 끄는 법을 가르친다.
+이것은 "할 수 없다"가 아니라 "가능하지만 안 한다" 항목이다.

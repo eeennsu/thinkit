@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// The failures a repo that already has configs produces, and that a greenfield
-// fixture cannot: a tsconfig with alias globs, a formatter and a linter already
-// owning their names, and a CLAUDE.md that is one import line.
+// 이미 설정을 가진 레포가 만들어내고 그린필드 픽스처는 만들 수 없는 실패들. alias
+// glob이 든 tsconfig, 자기 이름을 이미 소유한 포매터와 린터, 그리고 import 한 줄인
+// CLAUDE.md.
 //
-// Every case here was measured on a real repo before it was written down. Needs
-// no sandbox: nothing shells out to eslint, because what is under test is what
-// the scripts read and claim, not what the generated rules catch.
+// 여기 있는 모든 경우는 적히기 전에 실제 레포에서 측정됐다. 샌드박스가 필요 없다.
+// eslint를 부르지 않는데, 시험 대상이 생성된 규칙이 무엇을 잡는지가 아니라 스크립트가
+// 무엇을 읽고 무엇을 주장하는지이기 때문이다.
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,9 +25,9 @@ const ok = (name, cond, detail = "") => {
   else { failed++; console.log(`  FAIL  ${name}${detail ? ` -- ${detail}` : ""}`); }
 };
 
-// A tsconfig in the shape every aliased project has: a banner block comment, a
-// paths table whose keys contain `/*`, and commented-out entries after the last
-// live one. The glob is the part that broke the regex stripper.
+// alias를 쓰는 프로젝트라면 다 가지는 형태의 tsconfig. 배너 블록 주석, 키에 `/*`가 든
+// paths 테이블, 그리고 마지막 살아 있는 항목 뒤의 주석 처리된 항목. glob이 정규식
+// 스트리퍼를 망가뜨린 부분이다.
 const TSCONFIG = `{
   "compilerOptions": {
     "target": "ES2020",
@@ -53,19 +53,19 @@ const TSCONFIG = `{
 console.log("jsonc");
 {
   const parsed = parseJsonc(TSCONFIG);
-  ok("a tsconfig with alias globs parses", parsed !== null, "the paths block was eaten as a block comment");
-  ok("all five aliases survive", Object.keys(parsed?.compilerOptions?.paths ?? {}).length === 5,
+  ok("alias glob이 든 tsconfig가 파싱된다", parsed !== null, "paths 블록이 블록 주석으로 먹혔다");
+  ok("alias 다섯 개가 모두 살아남는다", Object.keys(parsed?.compilerOptions?.paths ?? {}).length === 5,
     JSON.stringify(Object.keys(parsed?.compilerOptions?.paths ?? {})));
   const flags = Object.entries(parsed?.compilerOptions ?? {}).filter(([k, v]) => v === true && /^(strict|no|exact)/.test(k));
-  ok("strict-family flags are counted", flags.length === 4, `got ${flags.length}`);
-  ok("a commented-out path stays out", !("@utils/*" in (parsed?.compilerOptions?.paths ?? {})));
-  ok("a comment marker inside a string is not a comment",
+  ok("strict 계열 플래그가 세어진다", flags.length === 4, `받은 값 ${flags.length}`);
+  ok("주석 처리된 경로는 밖에 남는다", !("@utils/*" in (parsed?.compilerOptions?.paths ?? {})));
+  ok("문자열 안의 주석 표시는 주석이 아니다",
     parseJsonc('{"a": "http://x.dev/*", "b": 1}')?.a === "http://x.dev/*");
-  ok("an escaped quote does not end the string",
+  ok("이스케이프된 따옴표는 문자열을 끝내지 않는다",
     parseJsonc('{"a": "he said \\" // not a comment", "b": 2}')?.b === 2);
-  ok("trailing commas are still tolerated", parseJsonc('{"a": [1, 2,],}')?.a.length === 2);
-  ok("a genuinely broken file still returns null", parseJsonc("{oops") === null);
-  ok("stripJsonc leaves string content untouched", stripJsonc('{"k": "a/*b*/c"}').includes("a/*b*/c"));
+  ok("뒤따르는 쉼표는 여전히 허용된다", parseJsonc('{"a": [1, 2,],}')?.a.length === 2);
+  ok("정말 깨진 파일은 그대로 null을 반환한다", parseJsonc("{oops") === null);
+  ok("stripJsonc는 문자열 내용을 건드리지 않는다", stripJsonc('{"k": "a/*b*/c"}').includes("a/*b*/c"));
 }
 
 console.log("precedence");
@@ -78,24 +78,24 @@ console.log("precedence");
   writeFileSync(join(tmp, "prettier.config.mjs"), "export default {};\n");
 
   const e = shadowed(tmp, "eslint.config.mjs");
-  ok("eslint.config.js shadows our .mjs", e.shadowed && e.winner === "eslint.config.js", JSON.stringify(e));
+  ok("eslint.config.js가 우리 .mjs를 가린다", e.shadowed && e.winner === "eslint.config.js", JSON.stringify(e));
   const p = shadowed(tmp, "prettier.config.mjs");
-  ok(".prettierrc shadows our prettier.config.mjs", p.shadowed && p.winner === ".prettierrc", JSON.stringify(p));
+  ok(".prettierrc가 우리 prettier.config.mjs를 가린다", p.shadowed && p.winner === ".prettierrc", JSON.stringify(p));
 
   rmSync(join(tmp, "eslint.config.js"));
-  ok("nothing shadows it once the .js is gone", shadowed(tmp, "eslint.config.mjs").shadowed === false);
+  ok(".js가 사라지면 아무것도 가리지 않는다", shadowed(tmp, "eslint.config.mjs").shadowed === false);
 
   rmSync(join(tmp, ".prettierrc"));
   writeFileSync(join(tmp, "package.json"), JSON.stringify({ prettier: { semi: false } }) + "\n");
-  ok("package.json#prettier shadows too", shadowed(tmp, "prettier.config.mjs").winner === "package.json#prettier");
+  ok("package.json#prettier도 가린다", shadowed(tmp, "prettier.config.mjs").winner === "package.json#prettier");
   writeFileSync(join(tmp, "package.json"), JSON.stringify({ name: "x" }) + "\n");
-  ok("a package.json without the key does not", shadowed(tmp, "prettier.config.mjs").shadowed === false);
+  ok("그 키가 없는 package.json은 가리지 않는다", shadowed(tmp, "prettier.config.mjs").shadowed === false);
 
-  ok("an unknown name claims no precedence", shadowed(tmp, "tsconfig.json").shadowed === false);
+  ok("모르는 이름은 우선순위를 주장하지 않는다", shadowed(tmp, "tsconfig.json").shadowed === false);
 
-  // The repo is told to spread ours into its own entry config. A repo that did
-  // it has a winner that also loads us, and calling that shadowed would report a
-  // wired harness as dead.
+  // 레포는 자기 진입 설정에 우리 것을 펼쳐 넣으라는 말을 듣는다. 그렇게 한 레포는 우리를
+  // 함께 로드하는 승자를 가지고, 그것을 가려졌다고 부르면 연결된 하네스를 죽었다고
+  // 보고하게 된다.
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
   writeFileSync(join(tmp, "eslint.config.mjs"), "export default [];\n");
@@ -104,17 +104,17 @@ console.log("precedence");
 
   writeFileSync(join(tmp, "eslint.config.js"), "export default [ /* nothing of ours */ ];\n");
   const dead = shadowed(tmp, "eslint.config.mjs", ours);
-  ok("a winner that ignores ours is shadowed", dead.shadowed && dead.via === null);
+  ok("우리 것을 무시하는 승자는 가린 것이다", dead.shadowed && dead.via === null);
 
   writeFileSync(join(tmp, "eslint.config.js"),
     "import boundaries from './eslint.config.boundaries.mjs';\nexport default [...boundaries];\n");
   const wired = shadowed(tmp, "eslint.config.mjs", ours);
-  ok("a winner that spreads ours is not", wired.shadowed === false, JSON.stringify(wired));
-  ok("and it reports which file loads us", wired.via === "eslint.config.js");
+  ok("우리 것을 펼쳐 넣는 승자는 아니다", wired.shadowed === false, JSON.stringify(wired));
+  ok("그리고 어느 파일이 우리를 로드하는지 보고한다", wired.via === "eslint.config.js");
 
-  // Default ourFiles is the file asked about, so the entry config alone counts.
+  // ourFiles 기본값은 묻고 있는 파일이므로 진입 설정 하나만 세어진다.
   writeFileSync(join(tmp, "eslint.config.js"), "import x from './eslint.config.mjs';\nexport default x;\n");
-  ok("the single-file form works too", shadowed(tmp, "eslint.config.mjs").shadowed === false);
+  ok("파일 하나짜리 형태도 작동한다", shadowed(tmp, "eslint.config.mjs").shadowed === false);
 }
 
 console.log("alias");
@@ -124,16 +124,16 @@ console.log("alias");
   writeFileSync(join(tmp, "tsconfig.json"), TSCONFIG);
   const profile = { alias: { "@": "src" } };
   const { alias, source } = await readAlias(tmp, profile);
-  ok("the repo's own table is read, not the profile's", source === "tsconfig.json", `source=${source}`);
-  ok("five aliases, not one", Object.keys(alias).length === 5, JSON.stringify(alias));
-  ok("the /* suffix is stripped from the prefix", alias["@widgets"] === "src/widgets", JSON.stringify(alias));
+  ok("프로필이 아니라 레포 자신의 테이블을 읽는다", source === "tsconfig.json", `source=${source}`);
+  ok("하나가 아니라 alias 다섯 개", Object.keys(alias).length === 5, JSON.stringify(alias));
+  ok("접두어에서 /* 접미사가 벗겨진다", alias["@widgets"] === "src/widgets", JSON.stringify(alias));
 }
 
-console.log("claude.md imports");
+console.log("CLAUDE.md import");
 {
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
-  // The shape that measured three tokens: a pointer, and the harness elsewhere.
+  // 3토큰으로 측정됐던 형태: 포인터 하나, 그리고 하네스는 다른 곳에.
   writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md");
   writeFileSync(join(tmp, "AGENTS.md"), [
     "# Agents",
@@ -144,7 +144,7 @@ console.log("claude.md imports");
     "- src/shared/utils/date.ts",
     "- src/entities/post/model.ts",
     "",
-    "## Gotchas",
+    "## 함정",
     "",
   ].join("\n"));
 
@@ -154,22 +154,22 @@ console.log("claude.md imports");
   const findings = JSON.parse(out).findings;
   const byId = (id) => findings.find((f) => f.id === id);
 
-  ok("the import is followed", !/about [0-9] tokens/.test(out), "still measuring the pointer, not the target");
-  ok("prose behind the import is judged",
+  ok("import를 따라간다", !/약 [0-9]토큰/.test(out), "대상이 아니라 포인터를 재고 있다");
+  ok("import 뒤의 산문이 판정된다",
     Boolean(byId("claude-md.repo-visible.structural")),
-    "path-like lines in the imported file went unreported");
-  ok("a Gotchas heading in the imported file counts",
-    !findings.some((f) => f.id === "claude-md.gotcha-section" && /No Gotchas/.test(f.message)));
+    "import된 파일의 경로형 줄이 보고되지 않았다");
+  ok("import된 파일의 함정 제목이 인정된다",
+    !findings.some((f) => f.id === "claude-md.gotcha-section" && /함정 섹션이 없다/.test(f.message)));
 
-  // --fix must append to the pointer file, not inline what it points at.
+  // --fix는 포인터 파일에 덧붙여야지, 그것이 가리키는 것을 인라인하면 안 된다.
   execFileSync(process.execPath,
     [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--fix"],
     { encoding: "utf8" });
-  ok("--fix leaves the import a one-liner",
+  ok("--fix가 import를 한 줄로 남겨 둔다",
     readFileSync(join(tmp, "CLAUDE.md"), "utf8").trim() === "@AGENTS.md",
     readFileSync(join(tmp, "CLAUDE.md"), "utf8").slice(0, 80));
 
-  // A cycle terminates rather than recursing until the stack gives out.
+  // 순환은 스택이 무너질 때까지 재귀하지 않고 종료한다.
   writeFileSync(join(tmp, "CLAUDE.md"), "@A.md");
   writeFileSync(join(tmp, "A.md"), "alpha @B.md");
   writeFileSync(join(tmp, "B.md"), "beta @A.md");
@@ -181,45 +181,45 @@ console.log("claude.md imports");
   } catch {
     cycled = false;
   }
-  ok("a cycle between imports terminates", cycled);
+  ok("import 사이의 순환이 종료한다", cycled);
 }
 
-console.log("layer directories");
+console.log("레이어 디렉터리");
 {
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
   const empty = execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--json"], { encoding: "utf8" });
-  ok("an empty repo gets every layer directory",
+  ok("빈 레포는 모든 레이어 디렉터리를 받는다",
     ["app", "screens", "widgets", "features", "entities", "shared"].every((l) => existsSync(join(tmp, "src", l))));
-  ok("and is told nothing about missing ones", !JSON.parse(empty).notes.some((n) => /do not exist/.test(n)));
+  ok("그리고 없는 것에 대한 말은 듣지 않는다", !JSON.parse(empty).notes.some((n) => /여기 없다/.test(n)));
 
-  // A repo with code: only the layers it already has, and nothing new on disk.
+  // 코드가 있는 레포: 이미 가진 레이어만, 디스크에 새로 생기는 것 없이.
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(join(tmp, "src/features/auth"), { recursive: true });
   mkdirSync(join(tmp, "src/shared"), { recursive: true });
   writeFileSync(join(tmp, "src/features/auth/index.ts"), "export {};\n");
   const brown = JSON.parse(execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--json"], { encoding: "utf8" }));
-  ok("a repo with code gets no new layer directory",
+  ok("코드가 있는 레포는 새 레이어 디렉터리를 받지 않는다",
     !existsSync(join(tmp, "src/entities")) && !existsSync(join(tmp, "src/screens")));
-  ok("and no .gitkeep in the ones it has",
+  ok("그리고 가진 것들 안에 .gitkeep도 생기지 않는다",
     !existsSync(join(tmp, "src/features/.gitkeep")) && !existsSync(join(tmp, "src/shared/.gitkeep")));
-  ok("the absent layers are named", brown.notes.some((n) => /entities/.test(n) && /do not exist/.test(n)),
+  ok("없는 레이어는 이름이 불린다", brown.notes.some((n) => /entities/.test(n) && /여기 없다/.test(n)),
     JSON.stringify(brown.notes));
-  ok("no layer directory shows up as written",
+  ok("어떤 레이어 디렉터리도 쓰인 것으로 나타나지 않는다",
     !brown.written.some((w) => /^src\/(entities|screens)\//.test(w.path)));
 
-  // A directory holding only our own .gitkeep is not code -- a re-run on a repo
-  // bootstrapped while empty must still count as greenfield.
+  // 우리 자신의 .gitkeep만 든 디렉터리는 코드가 아니다 — 비어 있을 때 bootstrap한
+  // 레포를 다시 돌리면 여전히 그린필드로 세어야 한다.
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(join(tmp, "src/features"), { recursive: true });
   writeFileSync(join(tmp, "src/features/.gitkeep"), "");
   execFileSync(process.execPath, [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp], { encoding: "utf8" });
-  ok("a .gitkeep-only tree is still greenfield", existsSync(join(tmp, "src/entities")));
+  ok(".gitkeep만 있는 트리는 여전히 그린필드다", existsSync(join(tmp, "src/entities")));
 }
 
-console.log("directories that are not layers");
+console.log("레이어가 아닌 디렉터리");
 {
   rmSync(tmp, { recursive: true, force: true });
   for (const d of ["src/app", "src/features", "src/shared", "src/db", "src/data", "src/.cache"]) {
@@ -234,27 +234,27 @@ console.log("directories that are not layers");
   const manifest = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
   const config = readFileSync(join(tmp, "eslint.config.boundaries.mjs"), "utf8");
 
-  ok("a non-layer directory is detected", manifest.fsd.extraRoots.includes("db"), JSON.stringify(manifest.fsd.extraRoots));
-  ok("layer directories are not", !manifest.fsd.extraRoots.includes("features"));
-  ok("a routingRoot inside fsdRoot is not", !manifest.fsd.extraRoots.includes("app"),
-    "app would shadow the routing element registered ahead of the layers");
-  ok("a dotted directory is not", !manifest.fsd.extraRoots.includes(".cache"));
-  ok("an element is registered for it", /"type": "db"[\s\S]{0,60}"pattern": "src\/db"/.test(config));
-  ok("the placement is surfaced", summary.notes.some((n) => /not layers/.test(n)), JSON.stringify(summary.notes));
+  ok("레이어가 아닌 디렉터리가 탐지된다", manifest.fsd.extraRoots.includes("db"), JSON.stringify(manifest.fsd.extraRoots));
+  ok("레이어 디렉터리는 아니다", !manifest.fsd.extraRoots.includes("features"));
+  ok("fsdRoot 안의 routingRoot도 아니다", !manifest.fsd.extraRoots.includes("app"),
+    "app이 레이어보다 먼저 등록된 라우팅 요소를 가리게 된다");
+  ok("점으로 시작하는 디렉터리도 아니다", !manifest.fsd.extraRoots.includes(".cache"));
+  ok("그것을 위한 요소가 등록된다", /"type": "db"[\s\S]{0,60}"pattern": "src\/db"/.test(config));
+  ok("배치가 드러난다", summary.notes.some((n) => /레이어가 아니다/.test(n)), JSON.stringify(summary.notes));
 
-  // Bottom of the graph: reachable from above, reaching only the bottom layer.
-  ok("a layer may import it", /"from"[\s\S]{0,120}"features"[\s\S]{0,160}"db"/.test(config) || config.includes('"type": "db"'));
-  ok("it may not import a layer above the bottom",
+  // 그래프 맨 아래: 위에서 닿을 수 있고, 맨 아래 레이어에만 닿는다.
+  ok("레이어가 그것을 import할 수 있다", /"from"[\s\S]{0,120}"features"[\s\S]{0,160}"db"/.test(config) || config.includes('"type": "db"'));
+  ok("맨 아래 위의 레이어는 import할 수 없다",
     !/{\s*"from":\s*{\s*"element":\s*{\s*"type":\s*"db"\s*}\s*},\s*"allow":\s*{\s*"to":\s*{\s*"element":\s*{\s*"type":\s*"features"/.test(config));
 
-  // An explicit answer wins, including the empty one.
+  // 명시적인 답변이 이긴다. 빈 답변도 포함해서.
   writeFileSync(answers, JSON.stringify({ routingRoot: "src/app", extraRoots: [] }));
   execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers], { encoding: "utf8" });
   const off = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
-  ok("an explicit empty answer turns detection off", off.fsd.extraRoots.length === 0);
+  ok("명시적인 빈 답변이 탐지를 끈다", off.fsd.extraRoots.length === 0);
 
-  // A name that is already a layer would register a second element for it.
+  // 이미 레이어인 이름은 그것을 위한 두 번째 요소를 등록하게 된다.
   writeFileSync(answers, JSON.stringify({ extraRoots: ["shared"] }));
   let threw = false;
   try {
@@ -262,19 +262,19 @@ console.log("directories that are not layers");
       [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers],
       { encoding: "utf8", stdio: "pipe" });
   } catch { threw = true; }
-  ok("naming a layer is rejected", threw);
+  ok("레이어 이름을 대면 거부된다", threw);
 }
 
-console.log("answers with nowhere to go");
+console.log("갈 곳 없는 답변");
 {
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(tmp, { recursive: true });
-  // The brownfield shape: a CLAUDE.md the repo already owns. Q2 is answered, and
-  // the section it writes lives in exactly that file.
+  // 브라운필드의 형태: 레포가 이미 소유한 CLAUDE.md. Q2에 답이 있고, 그 답이 쓰는
+  // 섹션이 사는 파일이 정확히 그 파일이다.
   writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md\n");
-  writeFileSync(join(tmp, "AGENTS.md"), "# Agents\n\n## Gotchas\n");
+  writeFileSync(join(tmp, "AGENTS.md"), "# Agents\n\n## 함정\n");
   const answers = join(tmp, "answers.json");
-  writeFileSync(answers, JSON.stringify({ safetyBoundaries: ["production deploys", "the signing key"] }));
+  writeFileSync(answers, JSON.stringify({ safetyBoundaries: ["프로덕션 배포", "서명키"] }));
 
   const out = execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers, "--json"],
@@ -282,42 +282,42 @@ console.log("answers with nowhere to go");
   const summary = JSON.parse(out);
   const manifest = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
 
-  ok("CLAUDE.md is left alone", summary.written.some((w) => w.path === "CLAUDE.md" && w.state === "exists, left alone"));
-  ok("an answer that was not written is not recorded as declared",
+  ok("CLAUDE.md은 그대로 둔다", summary.written.some((w) => w.path === "CLAUDE.md" && w.state === "exists, left alone"));
+  ok("쓰이지 않은 답변은 declared로 기록되지 않는다",
     manifest.declared.safetyBoundaries === false,
-    "declared:true here makes check.mjs report a section that was never written as gone");
-  ok("the dropped answer is surfaced, not swallowed",
-    summary.notes.some((n) => /Safety Boundaries/.test(n)), JSON.stringify(summary.notes));
+    "여기서 declared:true면 check.mjs가 쓰인 적 없는 섹션을 사라졌다고 보고한다");
+  ok("떨어진 답변이 삼켜지지 않고 드러난다",
+    summary.notes.some((n) => /안전 경계/.test(n)), JSON.stringify(summary.notes));
 
-  // And the false error it used to produce does not appear.
+  // 그리고 예전에 만들어내던 거짓 오류가 나타나지 않는다.
   const checkOut = execFileSync(process.execPath,
     [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
     { encoding: "utf8" });
-  ok("no phantom \"the section is gone\"",
-    !/section is gone/.test(checkOut), "the rule fired on a section that was never written");
+  ok("유령 \"섹션이 사라졌다\"가 없다",
+    !/섹션이 사라졌다/.test(checkOut), "쓰인 적 없는 섹션에 규칙이 걸렸다");
 
-  // The case the rule does exist for: we wrote CLAUDE.md, the repo removed the
-  // section afterwards. That must still be an error.
+  // 이 규칙이 실제로 존재하는 이유가 되는 경우: 우리가 CLAUDE.md을 썼고 레포가 그 뒤
+  // 섹션을 지웠다. 그것은 여전히 오류여야 한다.
   rmSync(join(tmp, "CLAUDE.md"));
   execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers],
     { encoding: "utf8" });
   const written = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
-  ok("a section we did write is recorded as declared", written.declared.safetyBoundaries === true);
+  ok("우리가 실제로 쓴 섹션은 declared로 기록된다", written.declared.safetyBoundaries === true);
   writeFileSync(join(tmp, "CLAUDE.md"),
-    readFileSync(join(tmp, "CLAUDE.md"), "utf8").replace(/^##\s+Safety Boundaries[\s\S]*?(?=^##\s|$)/m, ""));
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").replace(/^##\s+안전 경계[\s\S]*?(?=^##\s|$)/m, ""));
   let fired = false;
   try {
     execFileSync(process.execPath,
       [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
       { encoding: "utf8" });
   } catch (e) {
-    fired = /section is gone/.test(e.stdout ?? "");
+    fired = /섹션이 사라졌다/.test(e.stdout ?? "");
   }
-  ok("removing a section we wrote still errors", fired, "the rule stopped catching what it exists for");
+  ok("우리가 쓴 섹션을 지우면 여전히 오류가 난다", fired, "규칙이 자기가 존재하는 이유를 잡지 못하게 됐다");
 }
 
-console.log("warn on a repo that fails on warnings");
+console.log("경고에 실패하는 레포에서의 warn");
 {
   rmSync(tmp, { recursive: true, force: true });
   mkdirSync(join(tmp, "src"), { recursive: true });
@@ -330,34 +330,34 @@ console.log("warn on a repo that fails on warnings");
       { encoding: "utf8" })).notes.join("\n");
   };
 
-  ok("--max-warnings 0 makes warn behave like error, and it is said so",
+  ok("--max-warnings 0이면 warn이 error처럼 굴고, 그렇다고 말한다",
     /--max-warnings 0/.test(run({ lint: "eslint . --max-warnings 0" })));
-  ok("the build coupling is called out when it exists",
-    /build calls lint/.test(run({ lint: "eslint . --max-warnings 0", build: "bun run lint && next build" })));
-  ok("and not when it does not",
-    !/build calls lint/.test(run({ lint: "eslint . --max-warnings 0", build: "next build" })));
-  ok("a lint that tolerates warnings says nothing",
+  ok("빌드 결합이 있으면 그것을 짚어 준다",
+    /build가 lint를 부른다/.test(run({ lint: "eslint . --max-warnings 0", build: "bun run lint && next build" })));
+  ok("없으면 짚지 않는다",
+    !/build가 lint를 부른다/.test(run({ lint: "eslint . --max-warnings 0", build: "next build" })));
+  ok("경고를 견디는 lint에는 아무 말도 하지 않는다",
     !/max-warnings/.test(run({ lint: "eslint ." })));
 
   writeFileSync(answers, JSON.stringify({ severity: "error" }));
-  ok("severity=error is not the case this note is about",
+  ok("severity=error는 이 주석이 다루는 경우가 아니다",
     !/max-warnings/.test(run({ lint: "eslint . --max-warnings 0" })));
 }
 
-console.log("devDependency pins");
+console.log("devDependency 고정");
 {
   const profile = JSON.parse(readFileSync(join(root, "stacks/next/profile.json"), "utf8"));
   const pinned = profile.devDependencies?.[profile.resolver.devDependency];
   if (pinned) {
     const merged = { [profile.resolver.devDependency]: "*", ...profile.devDependencies };
-    ok("a profile's own resolver pin survives the merge",
+    ok("프로필 자신의 리졸버 고정이 병합을 살아남는다",
       merged[profile.resolver.devDependency] === pinned,
-      `expected ${pinned}, got ${merged[profile.resolver.devDependency]}`);
+      `기대 ${pinned}, 받은 값 ${merged[profile.resolver.devDependency]}`);
   } else {
-    console.log("  skip  next does not pin its resolver");
+    console.log("  skip  next는 자기 리졸버를 고정하지 않는다");
   }
 }
 
 if (!keep && existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
-console.log(failed ? `\n${failed} failing` : "\nall passing");
+console.log(failed ? `\n${failed}건 실패` : "\n전부 통과");
 process.exit(failed ? 1 : 0);

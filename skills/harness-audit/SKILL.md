@@ -1,86 +1,77 @@
 ---
 name: harness-audit
-description: Use when reviewing an existing repository harness - CLAUDE.md, skills, references, agent instructions - for conflicts, repo-visible filler, rules that a tool should own, and instructions that duplicate what the model already does.
+description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에이전트 지시 — 를 검토해 충돌, repo-visible 채움글, 도구가 소유해야 할 규칙, 모델이 이미 하는 일을 되풀이하는 지시를 찾을 때 쓴다.
 ---
 
-# Harness audit
+# 하네스 감사
 
-## Order
+## 순서
 
 1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs" --mode full --target <repo> --json`
-2. The machine findings are already decided. Read them; do not re-derive them.
-3. Resolve every `pending: true` item yourself, using its rubric. These are the
-   judgements a script cannot make.
-4. Report **everything**, sorted by severity.
+2. 기계 판정은 이미 끝난 것이다. 읽되, 다시 유도하지 않는다.
+3. `pending: true`인 항목은 각자의 루브릭으로 직접 판정한다. 스크립트가 내릴 수 없는
+   판단이 그것들이다.
+4. **전부** 보고한다. 심각도 순으로 정렬한다.
 
-The checker ships with the plugin while the working directory is the repo under
-audit, so it is addressed through `${CLAUDE_PLUGIN_ROOT}`. A repo that was
-bootstrapped also has its own planted copy at `.claude/harness/check.mjs`; that
-one carries only the generation-independent rules, so it is not a substitute
-for `--mode full`.
+체커는 플러그인과 함께 배포되고 작업 디렉터리는 감사 대상 레포이므로, `${CLAUDE_PLUGIN_ROOT}`로
+주소를 잡는다. bootstrap된 레포에는 `.claude/harness/check.mjs`에 자기 사본도 있지만, 그 사본은
+세대 무관 규칙만 지니므로 `--mode full`을 대신하지 못한다.
 
-## Report everything
+## 전부 보고한다
 
-Do not narrow the report to the important findings, and do not open with a
-severity filter. Filtering is a separate pass belonging to whoever reads it —
-a report trimmed at generation time cannot be un-trimmed later.
+보고를 중요한 발견으로 좁히지 않는다. 심각도 필터로 시작하지도 않는다. 필터링은 읽는
+사람에게 속한 별도의 패스다 — 생성 시점에 잘린 보고는 나중에 되돌릴 수 없다.
 
-This is not a style preference. Under the current calibration, an instruction
-to be conservative makes the report shorter rather than sharper, which is why
-`review.cutoff-instruction` is an error-severity finding in this plugin's own
-rule set.
+이것은 취향의 문제가 아니다. 현재 캘리브레이션에서 보수적으로 하라는 지시는 보고를
+날카롭게 만드는 게 아니라 짧게 만들고, 그래서 `review.cutoff-instruction`이 이 플러그인
+자신의 규칙 집합에서 error 심각도다.
 
-Sort order: error, then warn, then info. Dropped calibrated items are reported
-as `info` with the reason, never silently omitted — a check that did not run
-must not look like a check that passed.
+정렬 순서: error, warn, info. 탈락한 캘리브레이션 항목은 이유와 함께 `info`로 보고하고
+조용히 빼지 않는다 — 돌지 않은 검사가 통과한 검사처럼 보이면 안 된다.
 
-## Judgement items
+## 판단 항목
 
-Each `pending` finding names its rubric:
+`pending` 발견마다 자기 루브릭을 지목한다.
 
-| Finding | Rubric |
+| 발견 | 루브릭 |
 | --- | --- |
-| repo-visible prose, thin skills | `principles/gotcha-vs-repo-visible.md` |
-| duplicated rules, memory logs, absolute rules | `principles/ownership-map.md` |
-| rules a tool could own | `principles/tooling-over-docs.md` |
-| instructions duplicating model defaults, review cutoffs | `references/judgement-calls.md` |
+| repo-visible 산문, 알맹이 없는 스킬 | `principles/gotcha-vs-repo-visible.md` |
+| 중복된 규칙, 메모리 로그, 절대 규칙 | `principles/ownership-map.md` |
+| 도구가 소유할 수 있는 규칙 | `principles/tooling-over-docs.md` |
+| 모델 기본값을 되풀이하는 지시, 리뷰 컷오프 | `references/judgement-calls.md` |
 
-Read the actual files before judging. A finding with no quoted line is a guess.
+판정하기 전에 실제 파일을 읽는다. 인용한 줄이 없는 발견은 추측이다.
 
-## Planted files
+## 심어진 파일
 
-`check.mjs` reports the state of anything this plugin planted: `current`,
-`outdated`, `edited-locally`, `missing`, `unreadable`. Offer to regenerate an
-outdated file. Never overwrite one that was edited locally — surface the
-difference and let the owner merge.
+`check.mjs`는 이 플러그인이 심은 것들의 상태를 보고한다. `current`, `outdated`,
+`edited-locally`, `missing`, `unreadable`. `outdated`인 파일은 재생성을 제안한다. 로컬에서
+수정된 것은 절대 덮어쓰지 않는다 — 차이를 드러내고 소유자가 병합하게 한다.
 
-`outdated` is a verdict only the plugin copy can reach. It compares the target's
-recorded plant version against what the plugin would write today, and a planted
-copy has no canonical content to compare with; invoked on its own it reports
-`current` and says that staleness was not checkable from there. Do not read that
-as an up-to-date harness — run the plugin's own `check.mjs` for that answer.
+`outdated`는 플러그인 사본만 도달할 수 있는 판정이다. 대상 레포에 기록된 심기 버전을 지금
+플러그인이 쓸 내용과 비교하는데, 심어진 사본에는 비교할 정본이 없다. 혼자 호출되면
+`current`라고 보고하면서 거기서는 낡음을 확인할 수 없었다고 말한다. 그것을 최신 하네스로
+읽지 않는다 — 그 답을 원하면 플러그인 자신의 `check.mjs`를 돌린다.
 
-## With --fix
+## --fix를 쓸 때
 
-Three remedies, all additive:
+세 가지 처치, 전부 더하기만 한다.
 
-| Repaired | Not repaired |
+| 고치는 것 | 고치지 않는 것 |
 | --- | --- |
-| a missing `## Gotchas` heading, left empty | its contents — a guessed gotcha is worse than none |
-| an unregistered `harness:check` script, on a repo that has the checker | the same script on a repo with nothing planted: it would name a file that is not there |
-| a planted file that is `outdated` or `missing` | one that is `edited-locally`, or a manifest that is `unreadable` |
+| 빠진 `## 함정` 제목, 비워둔 채로 | 그 내용 — 지어낸 함정은 없느니만 못하다 |
+| 등록되지 않은 `harness:check` 스크립트, 체커가 있는 레포에서 | 심어진 게 없는 레포의 같은 스크립트: 없는 파일을 가리키게 된다 |
+| `outdated`거나 `missing`인 심어진 파일 | `edited-locally`인 것, 또는 `unreadable`인 매니페스트 |
 
-`package.json` keeps its own indentation and trailing-newline state through the
-repair. It is the repo's file; a one-key edit that reformats the whole thing
-puts every line of it in someone's diff.
+`package.json`은 수리를 거쳐도 자기 들여쓰기와 마지막 개행 상태를 지킨다. 그건 레포의
+파일이고, 키 하나 고치면서 전체를 다시 포매팅하면 그 파일의 모든 줄이 누군가의 diff에
+올라간다.
 
-Prose is never rewritten. Deleting a sentence from someone's CLAUDE.md is their
-call, and the report gives them what they need to make it.
+산문은 절대 다시 쓰지 않는다. 누군가의 CLAUDE.md에서 문장을 지우는 건 그쪽의 결정이고,
+보고서는 그 결정에 필요한 것을 준다.
 
-Refreshing a planted file needs the canonical content, so it works when the
-audit runs from the plugin. A planted copy invoked on its own reports the
-staleness and says to re-run bootstrap instead.
+심어진 파일을 갱신하려면 정본 내용이 필요하므로, 감사가 플러그인에서 돌 때만 작동한다.
+혼자 호출된 심어진 사본은 낡음을 보고하고 bootstrap을 다시 돌리라고 말한다.
 
-Findings are measured before the repairs run, so a fixed item still appears in
-the list with a `[fixed]` line under it. Re-run without `--fix` to see the
-state that remains.
+발견은 수리가 돌기 전에 측정하므로, 고쳐진 항목도 목록에 남고 그 아래 `[fixed]` 줄이
+붙는다. 남은 상태를 보려면 `--fix` 없이 다시 돌린다.
