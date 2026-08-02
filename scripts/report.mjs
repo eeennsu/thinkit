@@ -98,6 +98,7 @@ const aliasNote = aliasesPlanted
 // 목록의 세 번째 사본은 이 레포가 scaffold와 --fix에 대해 이미 한 번 해결한 어긋남이다.
 const files = [
   ...profile.files.map((f) => f.dest),
+  "AGENTS.md",
   "CLAUDE.md",
   "package.json",
   ".claude/references/architecture.md",
@@ -109,7 +110,13 @@ const files = [
 const layerDirs = fsd.layers.filter((l) => existsSync(join(target, profile.fsdRoot.replace(/\/+$/, ""), l.name)));
 const missingLayers = fsd.layers.filter((l) => !layerDirs.includes(l)).map((l) => l.name);
 
-const claudeMd = existsSync(join(target, "CLAUDE.md")) ? readFileSync(join(target, "CLAUDE.md"), "utf8") : "";
+// 산문이 사는 파일을 잰다. CLAUDE.md가 `@AGENTS.md` 한 줄이면 그 파일은 3토큰이고,
+// 그 숫자를 하네스 크기로 출력하면 예산 줄이 항상 통과한다 — 재지 않은 것을 잰 것처럼
+// 보여주는 셈이다.
+const readIf = (p) => (existsSync(join(target, p)) ? readFileSync(join(target, p), "utf8") : "");
+const claudeMdRaw = readIf("CLAUDE.md");
+const pointsAt = claudeMdRaw.trim().match(/^@([\w.][\w./-]*)$/);
+const claudeMd = pointsAt ? readIf(pointsAt[1]) : claudeMdRaw;
 const tokens = Math.round(claudeMd.length / 4);
 
 // 심어진 체커가 없는 대상은 실패한 검사가 아니라 검사가 없는 것이다. 둘이 똑같이
@@ -163,7 +170,7 @@ const lines = [
   `  앞의 네 줄은 tests/verify-boundaries.mjs가 이 스택과 이 변형 쌍에 대해 통과한`,
   `  뒤에만 보고할 수 있다.`,
   ``,
-  `CLAUDE.md            ${tokens}토큰 (측정했을 뿐 판정하지 않음: 예산을 제시하는 1차 소스가 없다)`,
+  `${(pointsAt ? pointsAt[1] : "CLAUDE.md").padEnd(20)} ${tokens}토큰 (측정했을 뿐 판정하지 않음: 예산을 제시하는 1차 소스가 없다)`,
   `harness:check        ${checkStatus}`,
 ];
 console.log(lines.join("\n"));

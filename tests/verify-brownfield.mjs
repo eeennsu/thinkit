@@ -314,6 +314,58 @@ console.log("레이어가 아닌 디렉터리");
   ok("레이어 이름을 대면 거부된다", threw);
 }
 
+console.log("산문은 AGENTS.md, CLAUDE.md는 포인터");
+{
+  // 네 가지 시작 상태. 쓰는 것은 CLAUDE.md이 없거나, 우리 것이거나, 이미 포인터일
+  // 때뿐이다. 자기 산문을 가진 레포 옆에 AGENTS.md를 새로 만들면 규칙이 두 곳에 살고
+  // 어느 쪽도 다른 쪽을 가리키지 않는데, 이 배치가 막으려는 것이 정확히 그 상태다.
+  const scaffold = (setup) => {
+    rmSync(tmp, { recursive: true, force: true });
+    mkdirSync(tmp, { recursive: true });
+    setup();
+    const answers = join(tmp, "answers.json");
+    writeFileSync(answers, JSON.stringify({ projectName: "T", oneLine: "한 줄", safetyBoundaries: ["프로덕션 배포"] }));
+    return JSON.parse(execFileSync(process.execPath,
+      [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers, "--json"],
+      { encoding: "utf8" }));
+  };
+  const read = (p) => (existsSync(join(tmp, p)) ? readFileSync(join(tmp, p), "utf8") : null);
+
+  let s = scaffold(() => {});
+  ok("빈 레포: 산문은 AGENTS.md로 가고 CLAUDE.md은 포인터 한 줄이다",
+    /^##\s+안전 경계\s*$/m.test(read("AGENTS.md") ?? "") && read("CLAUDE.md").trim() === "@AGENTS.md",
+    JSON.stringify({ claude: read("CLAUDE.md"), agents: (read("AGENTS.md") ?? "").slice(0, 40) }));
+
+  s = scaffold(() => writeFileSync(join(tmp, "CLAUDE.md"), "# 내 레포\n\n내가 쓴 규칙\n"));
+  ok("CLAUDE.md이 자기 산문을 지니면 둘 다 쓰지 않는다",
+    read("AGENTS.md") === null && read("CLAUDE.md").includes("내가 쓴 규칙"), read("CLAUDE.md"));
+  ok("쓰지 않았다는 것이 노트로 드러난다",
+    s.notes.some((n) => /AGENTS\.md를 쓰지 않았다/.test(n)), JSON.stringify(s.notes));
+
+  // 다른 곳을 가리키는 포인터도 남의 산문이다. 덮어쓰면 그 레포의 하네스가 우리 것을
+  // 가리키게 되고 원본은 아무도 읽지 않는다.
+  s = scaffold(() => {
+    writeFileSync(join(tmp, "CLAUDE.md"), "@docs/rules.md\n");
+    mkdirSync(join(tmp, "docs"), { recursive: true });
+    writeFileSync(join(tmp, "docs/rules.md"), "# 규칙\n");
+  });
+  ok("다른 파일을 가리키는 포인터는 덮어쓰지 않는다",
+    read("AGENTS.md") === null && read("CLAUDE.md").trim() === "@docs/rules.md", read("CLAUDE.md"));
+
+  // 레포가 AGENTS.md만 가진 경우. 산문은 그쪽 것이므로 두고, 없는 CLAUDE.md만 그것을
+  // 가리키게 만든다 — 하네스를 옮기는 게 아니라 닿게 하는 것이다.
+  s = scaffold(() => writeFileSync(join(tmp, "AGENTS.md"), "# 내 레포\n\n내가 쓴 규칙\n"));
+  ok("AGENTS.md만 있으면 그것을 두고 CLAUDE.md만 만든다",
+    read("AGENTS.md").includes("내가 쓴 규칙") && read("CLAUDE.md").trim() === "@AGENTS.md",
+    JSON.stringify(s.written.filter((w) => /AGENTS|CLAUDE/.test(w.path))));
+
+  s = scaffold(() => writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md\n"));
+  ok("손으로 쓴 포인터는 소유권을 주장하지 않고 지나간다",
+    s.written.some((w) => w.path === "CLAUDE.md" && w.state === "exists, left alone") &&
+      /^##\s+안전 경계\s*$/m.test(read("AGENTS.md")),
+    JSON.stringify(s.written.filter((w) => /AGENTS|CLAUDE/.test(w.path))));
+}
+
 console.log("갈 곳 없는 답변");
 {
   rmSync(tmp, { recursive: true, force: true });
@@ -345,16 +397,20 @@ console.log("갈 곳 없는 답변");
   ok("유령 \"섹션이 사라졌다\"가 없다",
     !/섹션이 사라졌다/.test(checkOut), "쓰인 적 없는 섹션에 규칙이 걸렸다");
 
-  // 이 규칙이 실제로 존재하는 이유가 되는 경우: 우리가 CLAUDE.md을 썼고 레포가 그 뒤
-  // 섹션을 지웠다. 그것은 여전히 오류여야 한다.
+  // 이 규칙이 실제로 존재하는 이유가 되는 경우: 우리가 산문을 썼고 레포가 그 뒤 섹션을
+  // 지웠다. 그것은 여전히 오류여야 한다.
+  //
+  // 둘 다 지운다. 산문은 AGENTS.md에 살고 CLAUDE.md는 그것을 가리키는 한 줄인데, 레포의
+  // AGENTS.md를 남겨두면 그것이 남의 산문이라 우리가 쓰지 않고 — 그러면 지울 섹션도 없다.
   rmSync(join(tmp, "CLAUDE.md"));
+  rmSync(join(tmp, "AGENTS.md"));
   execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers],
     { encoding: "utf8" });
   const written = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
   ok("우리가 실제로 쓴 섹션은 declared로 기록된다", written.declared.safetyBoundaries === true);
-  writeFileSync(join(tmp, "CLAUDE.md"),
-    readFileSync(join(tmp, "CLAUDE.md"), "utf8").replace(/^##\s+안전 경계[\s\S]*?(?=^##\s|$)/m, ""));
+  writeFileSync(join(tmp, "AGENTS.md"),
+    readFileSync(join(tmp, "AGENTS.md"), "utf8").replace(/^##\s+안전 경계[\s\S]*?(?=^##\s|$)/m, ""));
   let fired = false;
   try {
     execFileSync(process.execPath,
@@ -376,7 +432,7 @@ console.log("갈 곳 없는 답변");
     }
   };
   runFix();
-  const repaired = readFileSync(join(tmp, "CLAUDE.md"), "utf8");
+  const repaired = readFileSync(join(tmp, "AGENTS.md"), "utf8");
   ok("--fix가 빠진 안전 경계 제목을 되살린다",
     /^##\s+안전 경계\s*$/m.test(repaired), repaired);
   // 매니페스트는 경계가 선언됐다는 것만 알지 무엇이었는지는 모른다. 알더라도 도로
@@ -389,10 +445,10 @@ console.log("갈 곳 없는 답변");
 
   // 두 제목이 함께 빠진 경우. 처치가 메모리에 든 옛 내용에 덧붙이면 나중 것이 먼저
   // 쓴 제목을 지운다 — 둘 다 살아 있는지가 그 확인이다.
-  writeFileSync(join(tmp, "CLAUDE.md"),
+  writeFileSync(join(tmp, "AGENTS.md"),
     repaired.replace(/^##\s+안전 경계\s*$/m, "").replace(/^##\s+함정\s*$/m, ""));
   runFix();
-  const both = readFileSync(join(tmp, "CLAUDE.md"), "utf8");
+  const both = readFileSync(join(tmp, "AGENTS.md"), "utf8");
   ok("제목이 둘 다 빠져 있으면 둘 다 돌아온다",
     /^##\s+함정\s*$/m.test(both) && /^##\s+안전 경계\s*$/m.test(both), both);
 }
