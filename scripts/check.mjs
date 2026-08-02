@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 
 const SEV = { error: 0, warn: 1, info: 2 };
+// 정렬만으로는 심각도가 보이지 않는다. 발견이 스무 줄이면 error와 warn의 경계가 어디인지
+// 읽는 사람이 세어야 하고, 그 경계는 종료 코드를 가르는 선이다. 표식은 그 선을 눈에
+// 보이게 할 뿐 판정을 바꾸지 않는다 - `[error]` 태그는 그대로 남는다. grep하는 쪽이 있다.
+const MARK = { error: "🔴", warn: "🟠", info: "🔵" };
 const args = process.argv.slice(2);
 const opt = (name, fallback) => {
   const i = args.indexOf(`--${name}`);
@@ -383,7 +387,7 @@ if (json) {
     JSON.stringify({ mode, target, findings, planted, enforcement, fixed: fix ? fixed : undefined, notes: fix ? notes : undefined }, null, 2),
   );
 } else {
-  for (const f of findings) console.log(`[${f.severity}] ${f.id}: ${f.message}`);
+  for (const f of findings) console.log(`${MARK[f.severity]} [${f.severity}] ${f.id}: ${f.message}`);
   if (planted) for (const p of planted) console.log(`[planted] ${p.path}: ${p.state}${p.advice ? " - " + p.advice : ""}`);
   // 강제 상태는 발견이 아니다. 판단 패스가 "이건 린터가 맡는다"고 말하기 전에 확인할
   // 표이고, 확인 없는 그 주장이 이 감사가 남의 레포에서 지적하는 바로 그 실패다.
