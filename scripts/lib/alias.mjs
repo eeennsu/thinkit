@@ -12,6 +12,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseJsonc } from "./jsonc.mjs";
 
 // Enough of babel's api object for a config to evaluate. A config that reaches
 // for more than this throws, and the caller falls through to the next source.
@@ -49,12 +50,11 @@ function fromBabel(config) {
 // per-prefix, so only the "/*" form maps back; a single-file path has no
 // prefix to strip and is kept whole.
 function fromTsconfig(raw) {
-  let parsed;
-  try {
-    parsed = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ""));
-  } catch {
-    return null;
-  }
+  // JSONC, and the comment form that broke this was not `//` but the
+  // `/* Bundler mode */` banner every Vite-derived tsconfig ships with. See
+  // lib/jsonc.mjs for why the stripping has to be string-aware.
+  const parsed = parseJsonc(raw);
+  if (!parsed) return null;
   const paths = parsed?.compilerOptions?.paths;
   if (!paths || typeof paths !== "object") return null;
   const out = {};

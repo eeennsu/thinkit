@@ -239,7 +239,12 @@ pkg.scripts = {
 // quietly widening someone's range is a change nobody asked for. Only names that
 // are absent are added.
 pkg.devDependencies = { ...pkg.devDependencies };
-for (const [name, range] of Object.entries({ ...profile.devDependencies, [profile.resolver.devDependency]: "*" }))
+// The resolver is listed here in case a profile names one it did not pin. A
+// profile that pinned it wins: spreading the resolver key last overwrote the
+// profile's own `^4` with `*`, so the one dependency whose major version decides
+// whether the generated config resolves at all shipped unpinned.
+const devDeps = { [profile.resolver.devDependency]: "*", ...profile.devDependencies };
+for (const [name, range] of Object.entries(devDeps))
   if (!(name in pkg.devDependencies)) pkg.devDependencies[name] = range;
 // This is the one file here that belongs to the repo and is edited rather than
 // owned, so it keeps the repo's own formatting. Reformatting it to our style

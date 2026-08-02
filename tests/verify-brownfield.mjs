@@ -1,0 +1,180 @@
+#!/usr/bin/env node
+// The failures a repo that already has configs produces, and that a greenfield
+// fixture cannot: a tsconfig with alias globs, a formatter and a linter already
+// owning their names, and a CLAUDE.md that is one import line.
+//
+// Every case here was measured on a real repo before it was written down. Needs
+// no sandbox: nothing shells out to eslint, because what is under test is what
+// the scripts read and claim, not what the generated rules catch.
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
+import { stripJsonc, parseJsonc } from "../scripts/lib/jsonc.mjs";
+import { shadowed } from "../scripts/lib/precedence.mjs";
+import { readAlias } from "../scripts/lib/alias.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, "..");
+const tmp = join(root, ".tmp-brownfield");
+const keep = process.argv.includes("--keep");
+
+let failed = 0;
+const ok = (name, cond, detail = "") => {
+  if (cond) console.log(`  pass  ${name}`);
+  else { failed++; console.log(`  FAIL  ${name}${detail ? ` -- ${detail}` : ""}`); }
+};
+
+// A tsconfig in the shape every aliased project has: a banner block comment, a
+// paths table whose keys contain `/*`, and commented-out entries after the last
+// live one. The glob is the part that broke the regex stripper.
+const TSCONFIG = `{
+  "compilerOptions": {
+    "target": "ES2020",
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["src/app/*"],
+      "@widgets/*": ["src/widgets/*"],
+      "@features/*": ["src/features/*"],
+      "@shared/*": ["src/shared/*"],
+      "@db/*": ["src/db/*"]
+      // "@utils/*": ["src/shared/utils/*"],
+    }
+  },
+  "include": ["src"],
+}`;
+
+console.log("jsonc");
+{
+  const parsed = parseJsonc(TSCONFIG);
+  ok("a tsconfig with alias globs parses", parsed !== null, "the paths block was eaten as a block comment");
+  ok("all five aliases survive", Object.keys(parsed?.compilerOptions?.paths ?? {}).length === 5,
+    JSON.stringify(Object.keys(parsed?.compilerOptions?.paths ?? {})));
+  const flags = Object.entries(parsed?.compilerOptions ?? {}).filter(([k, v]) => v === true && /^(strict|no|exact)/.test(k));
+  ok("strict-family flags are counted", flags.length === 4, `got ${flags.length}`);
+  ok("a commented-out path stays out", !("@utils/*" in (parsed?.compilerOptions?.paths ?? {})));
+  ok("a comment marker inside a string is not a comment",
+    parseJsonc('{"a": "http://x.dev/*", "b": 1}')?.a === "http://x.dev/*");
+  ok("an escaped quote does not end the string",
+    parseJsonc('{"a": "he said \\" // not a comment", "b": 2}')?.b === 2);
+  ok("trailing commas are still tolerated", parseJsonc('{"a": [1, 2,],}')?.a.length === 2);
+  ok("a genuinely broken file still returns null", parseJsonc("{oops") === null);
+  ok("stripJsonc leaves string content untouched", stripJsonc('{"k": "a/*b*/c"}').includes("a/*b*/c"));
+}
+
+console.log("precedence");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  writeFileSync(join(tmp, "eslint.config.js"), "export default [];\n");
+  writeFileSync(join(tmp, "eslint.config.mjs"), "export default [];\n");
+  writeFileSync(join(tmp, ".prettierrc"), "{}\n");
+  writeFileSync(join(tmp, "prettier.config.mjs"), "export default {};\n");
+
+  const e = shadowed(tmp, "eslint.config.mjs");
+  ok("eslint.config.js shadows our .mjs", e.shadowed && e.winner === "eslint.config.js", JSON.stringify(e));
+  const p = shadowed(tmp, "prettier.config.mjs");
+  ok(".prettierrc shadows our prettier.config.mjs", p.shadowed && p.winner === ".prettierrc", JSON.stringify(p));
+
+  rmSync(join(tmp, "eslint.config.js"));
+  ok("nothing shadows it once the .js is gone", shadowed(tmp, "eslint.config.mjs").shadowed === false);
+
+  rmSync(join(tmp, ".prettierrc"));
+  writeFileSync(join(tmp, "package.json"), JSON.stringify({ prettier: { semi: false } }) + "\n");
+  ok("package.json#prettier shadows too", shadowed(tmp, "prettier.config.mjs").winner === "package.json#prettier");
+  writeFileSync(join(tmp, "package.json"), JSON.stringify({ name: "x" }) + "\n");
+  ok("a package.json without the key does not", shadowed(tmp, "prettier.config.mjs").shadowed === false);
+
+  ok("an unknown name claims no precedence", shadowed(tmp, "tsconfig.json").shadowed === false);
+}
+
+console.log("alias");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  writeFileSync(join(tmp, "tsconfig.json"), TSCONFIG);
+  const profile = { alias: { "@": "src" } };
+  const { alias, source } = await readAlias(tmp, profile);
+  ok("the repo's own table is read, not the profile's", source === "tsconfig.json", `source=${source}`);
+  ok("five aliases, not one", Object.keys(alias).length === 5, JSON.stringify(alias));
+  ok("the /* suffix is stripped from the prefix", alias["@widgets"] === "src/widgets", JSON.stringify(alias));
+}
+
+console.log("claude.md imports");
+{
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  // The shape that measured three tokens: a pointer, and the harness elsewhere.
+  writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md");
+  writeFileSync(join(tmp, "AGENTS.md"), [
+    "# Agents",
+    "",
+    "- src/features/auth/index.ts",
+    "- src/features/user/index.ts",
+    "- src/widgets/Header/index.tsx",
+    "- src/shared/utils/date.ts",
+    "- src/entities/post/model.ts",
+    "",
+    "## Gotchas",
+    "",
+  ].join("\n"));
+
+  const out = execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
+    { encoding: "utf8" });
+  const findings = JSON.parse(out).findings;
+  const byId = (id) => findings.find((f) => f.id === id);
+
+  ok("the import is followed", !/about [0-9] tokens/.test(out), "still measuring the pointer, not the target");
+  ok("prose behind the import is judged",
+    Boolean(byId("claude-md.repo-visible.structural")),
+    "path-like lines in the imported file went unreported");
+  ok("a Gotchas heading in the imported file counts",
+    !findings.some((f) => f.id === "claude-md.gotcha-section" && /No Gotchas/.test(f.message)));
+
+  // --fix must append to the pointer file, not inline what it points at.
+  execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--fix"],
+    { encoding: "utf8" });
+  ok("--fix leaves the import a one-liner",
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").trim() === "@AGENTS.md",
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").slice(0, 80));
+
+  // A cycle terminates rather than recursing until the stack gives out.
+  writeFileSync(join(tmp, "CLAUDE.md"), "@A.md");
+  writeFileSync(join(tmp, "A.md"), "alpha @B.md");
+  writeFileSync(join(tmp, "B.md"), "beta @A.md");
+  let cycled = true;
+  try {
+    execFileSync(process.execPath,
+      [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
+      { encoding: "utf8" });
+  } catch {
+    cycled = false;
+  }
+  ok("a cycle between imports terminates", cycled);
+}
+
+console.log("devDependency pins");
+{
+  const profile = JSON.parse(readFileSync(join(root, "stacks/next/profile.json"), "utf8"));
+  const pinned = profile.devDependencies?.[profile.resolver.devDependency];
+  if (pinned) {
+    const merged = { [profile.resolver.devDependency]: "*", ...profile.devDependencies };
+    ok("a profile's own resolver pin survives the merge",
+      merged[profile.resolver.devDependency] === pinned,
+      `expected ${pinned}, got ${merged[profile.resolver.devDependency]}`);
+  } else {
+    console.log("  skip  next does not pin its resolver");
+  }
+}
+
+if (!keep && existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
+console.log(failed ? `\n${failed} failing` : "\nall passing");
+process.exit(failed ? 1 : 0);

@@ -10,6 +10,8 @@ import { readAlias } from "./lib/alias.mjs";
 import { ownedUnchanged, plantedFiles } from "./lib/planted.mjs";
 import { counts, resolveOptions } from "./fsd-boundaries.mjs";
 import { groupDirs } from "./import-order.mjs";
+import { parseJsonc } from "./lib/jsonc.mjs";
+import { shadowed } from "./lib/precedence.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -40,20 +42,16 @@ const c = counts(fsd, profile, fsdOpts);
 const { alias, source: aliasSource } = await readAlias(target, profile, ownedUnchanged(target, manifest));
 const aliases = Object.keys(alias).length;
 
-// A real tsconfig.json is JSONC: block comments and trailing commas are legal
-// there and fatal to JSON.parse. An unreadable one counts zero strict flags,
-// which is what the file tells us; it does not stop the report.
+// A real tsconfig.json is JSONC: comments and trailing commas are legal there
+// and fatal to JSON.parse. An unreadable one counts zero strict flags, which is
+// what the file tells us; it does not stop the report.
+//
+// The stripping lives in lib/jsonc.mjs because doing it with a regex here read
+// `"@app/*": ["src/app/*"]` as an open block comment and reported zero flags on
+// a tsconfig that had five.
 function readJsonc(path) {
   if (!existsSync(path)) return null;
-  const stripped = readFileSync(path, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/,(\s*[}\]])/g, "$1");
-  try {
-    return JSON.parse(stripped);
-  } catch {
-    return null;
-  }
+  return parseJsonc(readFileSync(path, "utf8"));
 }
 const tsconfig = readJsonc(join(target, "tsconfig.json"));
 const strictFlags = tsconfig
@@ -67,6 +65,23 @@ const strictFlags = tsconfig
 const owns = (rel) => Boolean(manifest?.files?.some((f) => f.path === rel));
 const prettier = owns("prettier.config.mjs") ? 1 : 0;
 const importGroups = prettier ? groupDirs(fsd, profile, fsdOpts).length : 0;
+
+// Ownership answers "did we write this file". It does not answer "does the tool
+// read it". On a repo that already had eslint.config.js, ours is never loaded --
+// so the boundary policies in it enforce nothing, and a total that includes them
+// is a claim no run can support. Counted only when the file is the one in effect.
+const eslintShadow = owns("eslint.config.mjs") ? shadowed(target, "eslint.config.mjs") : { shadowed: false, winner: null };
+const prettierShadow = prettier ? shadowed(target, "prettier.config.mjs") : { shadowed: false, winner: null };
+const shadowNote = (s) => (s.shadowed ? `   <- generated but shadowed by ${s.winner}; not loaded, not counted` : "");
+const live = (s, n) => (s.shadowed ? 0 : n);
+
+// The alias table only enforces anything once it is written somewhere. When it
+// came from the profile and the repo kept its own tsconfig, it was generated
+// into a file we did not write -- which is to say, into nothing.
+const aliasesPlanted = aliasSource !== "profile" || owns("tsconfig.json");
+const aliasNote = aliasesPlanted
+  ? `alias entries, ${aliasSource === "profile" ? "generated into tsconfig paths and the bundler config" : `read from ${aliasSource}`}`
+  : `alias entries; the repo's own tsconfig.json was left in place, so the generated table was written nowhere`;
 
 // The conditional artifacts are listed too. They exist only when an interview
 // answer called for them, so their absence is a result, not an omission -- but
@@ -118,20 +133,21 @@ const lines = [
   `  - ${fsd.layers.length} layer directories under ${profile.fsdRoot}${fsdOpts.routingRoot ? ` + ${fsdOpts.routingRoot}` : ""}`,
   ``,
   `Rules enforced by tooling`,
-  `  layer direction    ${c.layerDirection}   (forbidden ordered layer pairs derived from layers.json)`,
-  `  slice isolation    ${c.sliceIsolation}   (isolation policies, one per sliced layer)${answered(c.sliceIsolation > 0, "answered: sliceCoupling=same-layer")}`,
-  `  public API         ${c.publicApi}   (element types whose imports must go through index.*)${answered(c.publicApi > 0, "answered: publicApi=open")}`,
-  `  routing            ${c.routing}   (routing element, present only when the stack has one)`,
+  `  layer direction    ${c.layerDirection}   (forbidden ordered layer pairs derived from layers.json)${shadowNote(eslintShadow)}`,
+  `  slice isolation    ${c.sliceIsolation}   (isolation policies, one per sliced layer)${shadowNote(eslintShadow) || answered(c.sliceIsolation > 0, "answered: sliceCoupling=same-layer")}`,
+  `  public API         ${c.publicApi}   (element types whose imports must go through index.*)${shadowNote(eslintShadow) || answered(c.publicApi > 0, "answered: publicApi=open")}`,
+  `  routing            ${c.routing}   (routing element, present only when the stack has one)${shadowNote(eslintShadow)}`,
   `  types              ${strictFlags}   (strict-family flags enabled in tsconfig.json)`,
-  `  format             ${prettier}   (prettier config written by this harness: 0 or 1)${answered(prettier > 0, "the repo's own prettier config was left in place")}`,
-  `  import order       ${importGroups}   (import groups the formatter orders, one per routing dir and layer)`,
-  `  path consistency   ${aliases}   (alias entries, ${aliasSource === "profile" ? "generated into tsconfig paths and the bundler config" : `read from ${aliasSource}`})`,
+  `  format             ${prettier}   (prettier config written by this harness: 0 or 1)${shadowNote(prettierShadow) || answered(prettier > 0, "the repo's own prettier config was left in place")}`,
+  `  import order       ${importGroups}   (import groups the formatter orders, one per routing dir and layer)${shadowNote(prettierShadow)}`,
+  `  path consistency   ${aliasesPlanted ? aliases : 0}   (${aliasNote})`,
   `  ---`,
-  `  total              ${c.layerDirection + c.sliceIsolation + c.publicApi + c.routing + strictFlags + prettier + importGroups + aliases}`,
-  `  Footnote: the total is the plain sum of the lines above. Each line counts a`,
-  `  different kind of thing, so the total is a sum, not a score. The first four`,
-  `  lines may only be reported after tests/verify-boundaries.mjs passes for this`,
-  `  stack and this pair of variants.`,
+  `  total              ${live(eslintShadow, c.layerDirection + c.sliceIsolation + c.publicApi + c.routing) + strictFlags + live(prettierShadow, prettier + importGroups) + (aliasesPlanted ? aliases : 0)}`,
+  `  Footnote: the total is the plain sum of the lines above, minus any line marked`,
+  `  shadowed -- a config the tool never loads enforces nothing, whoever wrote it.`,
+  `  Each line counts a different kind of thing, so the total is a sum, not a score.`,
+  `  The first four lines may only be reported after tests/verify-boundaries.mjs`,
+  `  passes for this stack and this pair of variants.`,
   ``,
   `CLAUDE.md            ${tokens} tokens (measured, not judged: no primary source states a budget)`,
   `harness:check        ${checkStatus}`,

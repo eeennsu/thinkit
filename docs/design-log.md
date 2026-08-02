@@ -285,3 +285,42 @@ README는 **아직 clone하지 않은 사람**을 향하고, CLAUDE.md는 **레�
 CLAUDE.md에 `## Gotchas` 대신 `## 어기면 안 되는 것`이 있어서다. **영어 제목을 덧붙여 통과시키지 않는다** —
 이 레포는 하네스를 심는 쪽이지 심어진 쪽이 아니고, 규칙을 만족시키려고 제목을 다는 것은
 이 플러그인이 다른 레포에서 잡아내는 바로 그 종류의 장식이다.
+
+## 브라운필드에서 처음 돌려보고 고친 것
+
+기존 하네스가 있는 실제 레포(Next 16, bun, 자체 `eslint.config.js`·`.prettierrc`,
+`CLAUDE.md`가 `@AGENTS.md` 한 줄)에 처음 설치해봤다. 그린필드 픽스처가 만들 수 없는
+실패 네 개가 나왔고, 전부 **읽기와 주장** 쪽이었지 생성 쪽이 아니었다.
+
+**tsconfig를 두 스크립트가 서로 다른 이유로 못 읽었다.** `report.mjs`의 블록 주석 정규식은
+`"@app/*": ["src/app/*"]`의 `/*`에서 매칭을 시작해 paths 블록을 먹었고, `alias.mjs`는 줄 주석만
+벗겨서 `/* Bundler mode */` 배너에 죽었다. 둘 다 **정상적인** tsconfig에서 실패한 것이다 —
+alias glob은 예외가 아니라 표준 형태다. 문자열 상태를 추적하는 스캐너를 `lib/jsonc.mjs`에 두고
+양쪽이 같은 것을 쓴다. 결과: strict 플래그 `0 → 5`, alias `1 → 5`.
+
+`path consistency 1`은 더 나빴다. 프로필 기본 alias를 세고 있었는데, 레포의 tsconfig는
+`exists, left alone`이라 그 테이블은 **어디에도 쓰이지 않았다.** 존재하지 않는 파일을 세고 있었다.
+
+**소유권과 강제력은 다른 축이다.** `putOwned`는 정확한 경로로 소유를 정하고, 도구는 **파일명
+패밀리 위의 우선순위**로 효력을 정한다. ESLint는 `eslint.config.js`를 찾으면 `.mjs`를 보지 않고,
+Prettier는 `.prettierrc`를 `prettier.config.mjs`보다 앞에 둔다. 그래서 두 문장이 동시에 참이었다 —
+생성된 파일은 우리 것이고, 아무것도 그것을 로드하지 않는다. `report.mjs`는 앞의 사실만 보고
+`total 25`를 출력했다. 실측은 `--print-config` 기준 boundaries 규칙 **0개**.
+
+`lib/precedence.mjs`가 각 도구의 공표된 해석 순서를 들고 있고, 가려진 줄은 `generated but
+shadowed`로 표시된 뒤 합계에서 빠진다. 같은 레포에서 `25 → 10`. **"이 경로가 비어 있다"는
+"이 관심사를 아무도 소유하지 않는다"가 아니다.**
+
+**CLAUDE.md가 `@AGENTS.md` 한 줄이면 audit이 아무것도 못 봤다.** 3토큰으로 측정하고, 산문을 읽는
+규칙 전부가 산문이 없는 파일 위에서 돌아 아무것도 보고하지 않았다. import를 따라가게 하니
+1356토큰이 되고 `directory tree in a fenced block`이 떴다 — 이 플러그인이 잡으라고 존재하는
+바로 그 위반이 그때까지 안 보이고 있었다. `--fix`는 여전히 원본에 append한다. 확장본에 붙이면
+import한 파일을 importer 안으로 인라인해놓고 수리라고 부르게 된다.
+
+**프로필의 resolver 핀이 죽어 있었다.** `{...profile.devDependencies, [resolver.devDependency]: "*"}`에서
+계산된 키가 뒤에 와서 `^4`를 `*`로 덮었다. 생성된 config가 아예 해석되느냐를 결정하는 그 의존성만
+핀이 없었다. 순서를 뒤집었다.
+
+테스트는 `tests/verify-brownfield.mjs`. 샌드박스가 필요 없다 — 검증 대상이 생성된 규칙이 무엇을
+잡느냐가 아니라 **스크립트가 무엇을 읽고 무엇을 주장하느냐**이기 때문이다. 여기 있는 케이스는
+전부 실제 레포에서 먼저 관측된 뒤에 적혔다.
