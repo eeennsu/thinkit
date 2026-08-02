@@ -1,0 +1,71 @@
+name: site
+
+# 문서가 site/ 밖에 살기 때문에 트리거도 거기까지 걸어야 한다. site/**만 보면
+# docs/principles.md 한 줄을 고쳐도 배포가 돌지 않고, 사이트는 옛 문장을 계속 싣는다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "principles/**"
+      - "modules/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 하나만 돈다. 취소하지 않는 이유는 절반 올라간 사이트가 남기 때문이다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 로컬 실측 환경과 같은 계열. Astro 7이 요구하는 하한이기도 하다.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run build
+
+      # 검사가 배포 앞에 온다. 뒤에 두면 깨진 사이트가 먼저 나가고, 그때는 이미 늦다.
+      # 모드를 전부 도는 이유는 하나만 도는 검사기가 나머지를 죽은 코드로 만들기 때문이다.
+      - name: 검사기 대조군
+        run: node scripts/verify-links.mjs --self-test
+      - name: 링크·앵커·라우트
+        run: node scripts/verify-links.mjs
+      - name: base 접두사
+        run: node scripts/verify-links.mjs --base /thinkit
+      - name: 한국어 검색 인덱스
+        run: node scripts/verify-links.mjs --search 충돌,경계
+      - name: UI 계약과 대비비
+        run: node scripts/verify-links.mjs --ui --contrast
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
