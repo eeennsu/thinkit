@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="thinkit">
+  <!-- 워드마크만. 로고 자산이 없어서 글자꼴을 도형으로 그린다 — 폰트가 없는 환경에서도
+       같은 모양이 나오고, 나중에 진짜 로고가 생기면 이 파일 하나를 갈아끼운다. -->
+  <rect width="32" height="32" rx="7" fill="#17181c" />
+  <rect x="14" y="7" width="4" height="18" fill="#8ab4ff" />
+  <rect x="9" y="12" width="14" height="4" fill="#8ab4ff" />
+</svg>

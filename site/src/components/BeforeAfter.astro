@@ -1,0 +1,45 @@
+---
+// 발췌 두 개를 나란히 놓는 블록. 내용은 여기 없다 — `src/content/samples/`의 파일에서 온다.
+// 인용 대상에게 교체 요청이 오면 갈아끼울 것이 파일 하나여야 하기 때문이다.
+//
+// glob으로 읽는 이유는 before.md가 아직 없을 수 있어서다. 정적 import는 파일이 없으면
+// 빌드를 세우고, 그러면 나머지 전부가 아직 사람이 고르지 않은 인용 하나에 묶인다.
+// 없을 때 무엇이 비었는지는 아래에서 눈에 보이게 말하고, verify-links --ui가 막는다.
+const samples = import.meta.glob("../content/samples/*.md", { eager: true });
+const sample = (name) => samples[`../content/samples/${name}.md`];
+
+const before = sample("before");
+const after = sample("after");
+// after.md는 우리가 만든 실측 산출물이다. 없으면 그것은 아직 안 정해진 것이 아니라 버그다.
+if (!after) throw new Error("BeforeAfter: src/content/samples/after.md 가 없다.");
+
+const Before = before?.Content;
+const After = after.Content;
+---
+
+<div class="sample-grid" id="before-after">
+  <section class="sample" data-sample="before">
+    <h3 class="sample-label">Before — 예전 정석</h3>
+    {
+      Before ? (
+        <Before />
+      ) : (
+        <p class="sample-pending">
+          인용할 발췌가 아직 없다. <code>src/content/samples/before.md</code>가 채워지면 여기 들어간다.
+          무엇을 인용할지는 사람이 정한다.
+        </p>
+      )
+    }
+  </section>
+
+  <section class="sample" data-sample="after">
+    <h3 class="sample-label">After — thinkit이 생성한 것</h3>
+    <After />
+  </section>
+</div>
+
+<p class="sample-caption">
+  줄어든 것은 총량이 아니라 <strong>매 요청마다 읽히는 것</strong>이다. 왼쪽의 규칙 중
+  린터·포매터·타입체커가 판정할 수 있는 것은 오른쪽에서 설정 파일로 내려갔고, 남은 산문은
+  한 파일에 모여 있다. 총량을 비교하지 않는 이유는 옮겨 담은 분량을 세지 않았기 때문이다.
+</p>
