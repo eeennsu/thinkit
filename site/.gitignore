@@ -1,0 +1,5 @@
+# 빌드 산출물과 Astro 캐시. 루트 .gitignore 는 node_modules/ 만 잡는다.
+# 여기 두는 이유는 무시 규칙이 그것이 생기는 디렉터리 옆에 살아야 site/ 를 떼어내도
+# 같이 따라가기 때문이다.
+dist/
+.astro/

@@ -36,7 +36,7 @@
 ```yaml
 id: Q1
 axis: principle
-writes: CLAUDE.md 첫 줄
+writes: AGENTS.md 첫 줄
 ```
 
 README가 있어도 묻는다 — 먼저 읽고, 그 첫 줄을 되돌려 주며 확인받는 쪽으로 한다. 맨입으로

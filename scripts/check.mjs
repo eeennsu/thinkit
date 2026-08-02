@@ -101,6 +101,26 @@ function expandImports(text, seen = new Set(), depth = 0) {
 const claudeMdRaw = readIf("CLAUDE.md");
 const claudeMd = claudeMdRaw === null ? null : expandImports(claudeMdRaw);
 
+// 하네스 산문이 실제로 사는 파일. CLAUDE.md가 import 하나뿐인 포인터면 규칙도 함정도
+// 그 import된 파일에 있고, 포인터에 제목을 더하면 그 제목은 자기가 속한 문서와 다른
+// 파일에 홀로 앉는다 — 함정을 쓰려고 여는 파일은 AGENTS.md 쪽이다.
+//
+// import가 여럿이거나 CLAUDE.md가 자기 산문을 가지고 있으면 어느 쪽인지 우리가 알 수
+// 없다. 그때는 CLAUDE.md에 남긴다. 모르면서 남의 파일을 고르지 않는다.
+function proseFile(raw) {
+  if (raw === null) return null;
+  const seen = new Set();
+  const rest = raw
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/(^|\s)@([\w.][\w./-]*)/g, (whole, lead, rel) => {
+      if (rel.includes("..") || readIf(rel) === null) return whole;
+      seen.add(rel);
+      return lead;
+    });
+  if (seen.size !== 1 || rest.trim()) return "CLAUDE.md";
+  return [...seen][0];
+}
+
 const machine = {
   "claude-md.exists": (rule) => {
     if (claudeMd === null) add(rule, rule.severity, "CLAUDE.md이 없다.");
@@ -216,6 +236,11 @@ for (const rule of rules.items) {
 const plantLib = pluginRoot ? await import("./lib/planted.mjs") : null;
 const canonicalVersion = plantLib ? plantLib.plantedFiles(pluginRoot).version : null;
 
+// 대상 레포에서 지금 강제되고 있는 것. 삭제 처치의 관문이고, 삭제하지 않을 때도
+// 보고한다 — 판단 항목을 판정하는 쪽이 "린터가 대신할 수 있다"를 확인 없이 말하는 것이
+// 이 감사가 다른 레포에서 지적하는 실패와 같은 모양이기 때문이다.
+const enforcement = pluginRoot ? (await import("./lib/enforced.mjs")).readEnforcement(target) : null;
+
 // 심어진 사본: 스킬이 보고하는 것과 같은 세 상태 비교.
 function plantedState() {
   const manifestPath = join(target, ".claude/harness/manifest.json");
@@ -247,11 +272,63 @@ const notes = [];
 if (fix) {
   const write = (rel, content) => writeFileSync(join(target, rel), content, "utf8");
 
-  // 펼친 파일이 아니라 raw 파일에서 쓴다. 펼친 쪽에 덧붙이면 import된 모든 파일을
-  // import한 쪽에 인라인해 놓고 그것을 수리라고 부르게 된다.
-  if (claudeMdRaw !== null && !/^##\s+함정\s*$/m.test(claudeMd)) {
-    write("CLAUDE.md", `${claudeMdRaw.replace(/\s*$/, "")}\n\n## 함정\n`);
-    fixed.push("CLAUDE.md: 빠진 함정 제목을 더했다 (일부러 비워 둠)");
+  // 빠진 제목을 산문이 사는 파일 끝에 더한다.
+  //
+  // 펼친 파일이 아니라 raw 파일에 쓴다. 펼친 쪽에 덧붙이면 import된 모든 파일을
+  // import한 쪽에 인라인해 놓고 그것을 수리라고 부르게 된다. 어느 raw 파일인지는
+  // proseFile이 정한다 — 포인터가 아니라 산문이 사는 쪽이다.
+  //
+  // 매번 디스크에서 다시 읽는다. 제목이 둘 다 빠져 있으면 두 번 불리고, 메모리에 든
+  // 앞선 내용에 덧붙이면 먼저 쓴 제목을 지운다.
+  const appendHeading = (heading) => {
+    const file = proseFile(readIf("CLAUDE.md"));
+    const head = readIf(file).replace(/\s*$/, "");
+    write(file, head ? `${head}\n\n${heading}\n` : `${heading}\n`);
+    return file;
+  };
+
+  if (claudeMdRaw !== null && !/^##\s+함정\s*$/m.test(claudeMd))
+    fixed.push(`${appendHeading("## 함정")}: 빠진 함정 제목을 더했다 (일부러 비워 둠)`);
+
+  // 같은 모양의 처치. 설정 때 안전 경계가 선언됐는데 섹션이 사라진 경우다.
+  //
+  // 제목만 되살리고 내용은 채우지 않는다. 매니페스트에 선언이 남아 있으니 그것을 도로
+  // 펼칠 수도 있지만, 그러면 소유자가 일부러 지운 경계가 되살아난다. 그건 수리가 아니라
+  // 되돌리기고, 감사가 내릴 판단이 아니다. 빈 제목과 발견을 남기면 소유자가 정한다.
+  const manifestRaw = readIf(".claude/harness/manifest.json");
+  const manifestParsed = manifestRaw === null ? null : parseJson(manifestRaw, ".claude/harness/manifest.json");
+  if (
+    claudeMdRaw !== null &&
+    manifestParsed?.ok &&
+    manifestParsed.value.declared?.safetyBoundaries &&
+    !/^##\s+안전 경계\s*$/m.test(claudeMd)
+  )
+    fixed.push(`${appendHeading("## 안전 경계")}: 빠진 안전 경계 제목을 더했다 (일부러 비워 둠)`);
+
+  // 디렉터리 트리를 지운다. 이것이 유일하게 기계가 혼자 내려도 되는 삭제인 이유는,
+  // 판정에 레포의 의도가 들어가지 않기 때문이다. 트리는 규칙이 아니라 파일 시스템에
+  // 대한 서술이고, `ls` 한 번이 더 정확한 답을 더 싸게 내놓는다. 무엇이 강제되는지
+  // 물을 것도 없다 — 강제할 것이 없다.
+  //
+  // 펜스만 지우고 그 위의 제목과 문장은 남긴다. 트리 옆에 붙은 산문은 보통 규칙이고
+  // (의존은 한 방향으로 흐른다), 규칙을 지우는 것은 도구가 그것을 맡았는지 확인한
+  // 뒤에만 할 수 있다. 그 확인은 판단 패스의 몫이다.
+  const treeFile = proseFile(claudeMdRaw);
+  if (treeFile) {
+    const before = readIf(treeFile) ?? "";
+    let removed = 0;
+    const after = before
+      .replace(/```[\s\S]*?```\n?/g, (m) => {
+        if (!/[├└│]──/.test(m)) return m;
+        removed++;
+        return "";
+      })
+      .replace(/\n{3,}/g, "\n\n");
+    if (removed) {
+      write(treeFile, after);
+      const lines = before.split("\n").length - after.split("\n").length;
+      fixed.push(`${treeFile}: 디렉터리 트리 ${removed}개를 지웠다 (${lines}줄). 파일 시스템이 이미 답한다`);
+    }
   }
 
   const pkgRaw = readIf("package.json");
@@ -302,10 +379,17 @@ findings.sort((a, b) => SEV[a.severity] - SEV[b.severity]);
 const failed = findings.some((f) => f.severity === "error" && !f.pending && !f.dropped);
 
 if (json) {
-  console.log(JSON.stringify({ mode, target, findings, planted, fixed: fix ? fixed : undefined, notes: fix ? notes : undefined }, null, 2));
+  console.log(
+    JSON.stringify({ mode, target, findings, planted, enforcement, fixed: fix ? fixed : undefined, notes: fix ? notes : undefined }, null, 2),
+  );
 } else {
   for (const f of findings) console.log(`[${f.severity}] ${f.id}: ${f.message}`);
   if (planted) for (const p of planted) console.log(`[planted] ${p.path}: ${p.state}${p.advice ? " - " + p.advice : ""}`);
+  // 강제 상태는 발견이 아니다. 판단 패스가 "이건 린터가 맡는다"고 말하기 전에 확인할
+  // 표이고, 확인 없는 그 주장이 이 감사가 남의 레포에서 지적하는 바로 그 실패다.
+  if (enforcement)
+    for (const [key, c] of Object.entries(enforcement.checks))
+      console.log(`[enforced] ${key}: ${c.state}${c.where ? ` (${c.where.join(", ")})` : ""}${c.why ? ` - ${c.why}` : ""}`);
   for (const f of fixed) console.log(`[fixed] ${f}`);
   for (const n of notes) console.log(`[note] ${n}`);
   console.log(`\n발견 ${findings.length}건 (판단이 필요한 것 ${findings.filter((f) => f.pending).length}건).`);

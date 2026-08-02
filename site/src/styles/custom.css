@@ -1,0 +1,74 @@
+/* Starlight 테마 위에 얹는 것만 여기 산다. 폰트·본문 색·간격은 건드리지 않는다 —
+   랜딩과 문서 13쪽이 같은 것을 써야 톤이 갈릴 자리가 없다.
+
+   대비 검사(scripts/verify-links.mjs --ui --contrast)가 읽는 규약:
+   `:root`는 다크, `:root[data-theme="light"]`는 라이트로 보고, 각 블록의
+   --thinkit-accent 와 --thinkit-surface 를 전경/배경 쌍으로 계산한다.
+   그래서 두 변수는 반드시 리터럴 색이어야 한다. var()로 미루면 검사가 볼 것이 없다. */
+
+:root {
+  /* 강조는 하나다. 링크와 hero 버튼에만 쓴다. Before/After는 색으로 구분하지 않는다 —
+     라벨·위치·굵기로만 구분하므로 색맹 사용자와 흑백 인쇄에 같은 정보가 간다. */
+  --thinkit-accent: #8ab4ff;
+  /* Starlight 다크의 --sl-color-black 값. 아래에서 --sl-color-bg 에 그대로 넣어
+     선언된 값과 실제 배경이 갈라질 자리를 없앤다. */
+  --thinkit-surface: #17181c;
+
+  --sl-color-bg: var(--thinkit-surface);
+  --sl-color-accent: var(--thinkit-accent);
+  --sl-color-text-accent: var(--thinkit-accent);
+}
+
+:root[data-theme="light"] {
+  --thinkit-accent: #1d4ed8;
+  --thinkit-surface: #ffffff;
+
+  --sl-color-bg: var(--thinkit-surface);
+  --sl-color-accent: var(--thinkit-accent);
+  --sl-color-text-accent: var(--thinkit-accent);
+}
+
+/* primary hero 버튼은 같은 쌍을 뒤집어 쓴다 (배경 강조색 + 전경 배경색). 대비비는
+   대칭이므로 위에서 계산한 값 하나가 링크와 버튼 양쪽을 덮는다. */
+
+/* Before / After — 데스크톱 2열, 좁아지면 1열. 50rem은 Starlight가 이미 쓰는
+   브레이크포인트다. 새로 만들면 랜딩만 다른 폭에서 접힌다. */
+.sample-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 50rem) {
+  .sample-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.sample {
+  min-width: 0; /* 그리드 트랙이 코드 폭에 밀려 늘어나지 않게 한다. */
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.sample-label {
+  margin-top: 0;
+  font-size: var(--sl-text-lg);
+}
+
+/* 페이지 본문이 가로로 스크롤되면 안 된다. 넘치는 것은 블록 안에서만 넘친다. */
+.sample :is(pre, .expressive-code) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.sample-pending {
+  border-left: 3px solid var(--sl-color-hairline);
+  padding-left: 0.75rem;
+}
+
+.sample-caption {
+  margin-top: 1rem;
+}

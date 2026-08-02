@@ -198,7 +198,26 @@ const vars = {
 };
 
 for (const f of profile.files) putOwned(f.dest, render(readFileSync(join(root, f.template), "utf8"), vars));
-putOwned("CLAUDE.md", render(readFileSync(join(root, "templates/CLAUDE.md.hbs"), "utf8"), vars));
+
+// 산문은 AGENTS.md에 살고 CLAUDE.md는 그것을 가리키는 한 줄이다. 하네스를 읽는 도구가
+// Claude Code 하나가 아니고, 같은 규칙을 파일 둘에 두 벌 두면 그 둘은 반드시 갈라진다.
+// 포인터는 갈라질 자리를 없앤다 — check.mjs가 `@`를 펼쳐서 읽으므로 감사도 토큰 예산도
+// 포인터가 아니라 산문을 판정한다.
+//
+// 자기 산문을 CLAUDE.md에 가진 레포에는 둘 다 쓰지 않는다. 거기에 AGENTS.md를 새로
+// 만들면 규칙이 두 곳에 살고 어느 쪽도 다른 쪽을 가리키지 않는데, 그것이 이 배치가
+// 막으려는 상태 자체다. CLAUDE.md가 없거나, 우리가 쓴 것이거나, 이미 `@AGENTS.md`
+// 한 줄일 때만 쓴다. 다른 곳을 가리키는 포인터도 남의 산문이다 — 덮어쓰면 그 레포의
+// 하네스가 우리 것을 가리키게 되고 원본은 아무도 읽지 않는다.
+const claudeMdOnDisk = existsSync(join(target, "CLAUDE.md")) ? readFileSync(join(target, "CLAUDE.md"), "utf8") : null;
+const claudeMdIsOurs = Boolean(prev?.files.some((f) => f.path === "CLAUDE.md"));
+const proseIsOursToWrite = claudeMdOnDisk === null || claudeMdIsOurs || claudeMdOnDisk.trim() === "@AGENTS.md";
+if (proseIsOursToWrite) {
+  putOwned("AGENTS.md", render(readFileSync(join(root, "templates/AGENTS.md.hbs"), "utf8"), vars));
+  // 이미 손으로 쓴 포인터가 있으면 putOwned가 "exists, left alone"으로 두고 지나간다.
+  // 내용이 이미 우리가 쓸 것과 같으므로 소유권을 주장할 이유가 없다.
+  putOwned("CLAUDE.md", "@AGENTS.md\n");
+}
 if (answers.exceptions?.length)
   putOwned(".claude/references/architecture.md", render(readFileSync(join(root, "templates/architecture.md.hbs"), "utf8"), vars));
 
@@ -240,19 +259,19 @@ for (const { path: rel, content } of plant.files) putOwned(rel, content);
 // 변형을 기록하는 이유는 report.mjs가 그것을 다시 유도할 수 없기 때문이다. 스택이
 // 아니라 답변에서 왔다. 프로필에서 다시 계산하는 보고서는 다르게 답한 레포에 엄격한
 // 개수를 출력하게 된다.
-// 답변됐고 *그리고* 쓰였을 때만. 이것이 기록하는 섹션은 CLAUDE.md에 살고, 이미 하나
-// 가지고 있던 레포는 자기 것을 지킨다 — 그래서 브라운필드 레포에서는 답이 수집됐는데
-// 갈 곳이 없었다. 그런데도 declared로 기록하면 check.mjs가 "설정 때 선언됐는데 섹션이
-// 사라졌다"고 보고했고, 그것은 절대 해소되지 않는 `error`이면서 거짓 문장이다. 사라진
-// 것도 없고 쓰인 적도 없다. 우리가 소유하지만 레포가 그 뒤 편집한 파일은 declared로
-// 남고, 그 경우가 이 규칙이 만들어진 이유다.
-const ownsClaudeMd = manifestFiles.some((f) => f.path === "CLAUDE.md");
-const boundariesDropped = Boolean(answers.safetyBoundaries?.length) && !ownsClaudeMd;
+// 답변됐고 *그리고* 쓰였을 때만. 이것이 기록하는 섹션은 산문 파일에 살고, 이미 자기
+// 산문을 가지고 있던 레포는 그것을 지킨다 — 그래서 브라운필드 레포에서는 답이
+// 수집됐는데 갈 곳이 없었다. 그런데도 declared로 기록하면 check.mjs가 "설정 때
+// 선언됐는데 섹션이 사라졌다"고 보고했고, 그것은 절대 해소되지 않는 `error`이면서 거짓
+// 문장이다. 사라진 것도 없고 쓰인 적도 없다. 우리가 소유하지만 레포가 그 뒤 편집한
+// 파일은 declared로 남고, 그 경우가 이 규칙이 만들어진 이유다.
+const ownsProse = manifestFiles.some((f) => f.path === "AGENTS.md");
+const boundariesDropped = Boolean(answers.safetyBoundaries?.length) && !ownsProse;
 
 put(".claude/harness/manifest.json", JSON.stringify({
   version: plant.version,
   stack,
-  declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) && ownsClaudeMd },
+  declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) && ownsProse },
   fsd: {
     publicApi: fsdOpts.publicApi,
     sliceCoupling: fsdOpts.sliceCoupling,
@@ -300,7 +319,7 @@ put("package.json", JSON.stringify(pkg, null, indent) + trailingNewline);
 
 // 수집됐는데 갈 곳이 없었던 답변은 파일 목록의 세부사항이 아니다. 이번 실행에서 레포
 // 소유자가 손대야 하는 유일한 것이고, `written`에서는 보이지 않는다 — 거기 줄은
-// "CLAUDE.md: exists, left alone"이라고 말하고, 그것은 보통 그렇듯 무해한 결과처럼
+// "AGENTS.md: exists, left alone"이라고 말하고, 그것은 보통 그렇듯 무해한 결과처럼
 // 읽힌다.
 const notes = [];
 // 코드가 이미 있는 레포의 기본값은 `warn`이고, 그 이유는 `error`가 누군가 규칙을 끌
@@ -330,10 +349,17 @@ if (fsdOpts.extraRoots.length)
       `각각 그래프 맨 아래에 등록된다. 무엇이든 그것을 import할 수 있고, 그것은 ` +
       `${fsd.layers[fsd.layers.length - 1].name}과 나머지를 import할 수 있다. 다르게 배치하려면 extraRoots로 답한다.`
   );
+if (!proseIsOursToWrite)
+  notes.push(
+    `CLAUDE.md이 자기 산문을 가지고 있어서 AGENTS.md를 쓰지 않았다. 이 배치는 산문을 ` +
+      `AGENTS.md에 두고 CLAUDE.md을 그것을 가리키는 한 줄로 두는데, 옆에 새 AGENTS.md를 ` +
+      `만들면 규칙이 두 곳에 살고 어느 쪽도 다른 쪽을 가리키지 않는다. 이 배치를 원하면 ` +
+      `CLAUDE.md 내용을 AGENTS.md로 옮기고 CLAUDE.md을 "@AGENTS.md" 한 줄로 바꾼 뒤 다시 돌린다.`
+  );
 if (boundariesDropped)
   notes.push(
-    `Q2에 답이 있었지만 CLAUDE.md이 이미 있어서 "## 안전 경계" 섹션을 쓰지 않았다. ` +
-      `경계 ${answers.safetyBoundaries.length}개는 당신의 답변 파일에만 있고 다른 어디에도 없다 — 손으로 CLAUDE.md에 더한다.`
+    `Q2에 답이 있었지만 산문 파일이 이미 있어서 "## 안전 경계" 섹션을 쓰지 않았다. ` +
+      `경계 ${answers.safetyBoundaries.length}개는 당신의 답변 파일에만 있고 다른 어디에도 없다 — 손으로 더한다.`
   );
 
 const summary = {

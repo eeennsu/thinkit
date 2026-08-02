@@ -1,0 +1,77 @@
+---
+title: thinkit
+description: 레포의 하네스 세팅을 자동화하는 Claude Code 플러그인. 세팅을 대신 써주지 않고, 레포 소유자가 답해야 정해지는 것을 묻는다.
+template: splash
+hero:
+  tagline: CLAUDE.md를 만들어주는 도구가 아니라, 계속 얇게 유지시켜주는 도구다.
+  actions:
+    - text: 문서 보기
+      link: /thinkit/docs/principles/
+      variant: primary
+    - text: 설치
+      link: "#설치"
+      variant: minimal
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import BeforeAfter from "../../components/BeforeAfter.astro";
+
+## Before / After
+
+<BeforeAfter />
+
+## 왜 뒤집혔나
+
+규칙을 미리 많이 주는 것이 정석이었다. 지금은 그 규칙들이 서로 충돌해 모델이 판정에 추론을
+쓰게 만든다. 충돌은 에이전트를 망가뜨리지 않는다 — **요금을 청구한다.** 답은 대체로 맞고,
+거기 도달하는 데 더 많이 쓴다.
+
+그래서 하네스 세팅의 일은 무엇을 적을지 고르는 것이 아니라 **무엇을 안 적어도 되는지
+판정하는 것**이 되었다. 근거와 1차 소스는 [원칙 문서 §3](/thinkit/docs/principles/#3-지시-충돌이-왜-비용인가)에 있다.
+
+## 설치
+
+```
+/plugin marketplace add eeennsu/thinkit
+/plugin install thinkit@eeennsu
+```
+
+<CardGrid>
+  <Card title="/harness-bootstrap">
+    제로베이스 레포에 하네스를 세팅한다. 스택은 인자다 —
+    `rn-cli` · `rn-expo` · `react` · `next`.
+  </Card>
+  <Card title="/harness-audit">
+    이미 세팅된 레포를 같은 기준으로 감사한다. `--fix`로 고칠 수 있는 것만 고친다.
+  </Card>
+</CardGrid>
+
+둘은 **같은 판정 기준을 시점만 다르게** 적용한다. 기준은 한 파일에 산다 —
+부트스트랩이 통과시킨 것을 감사가 잡아내는 일은 생기지 않는다.
+
+## 무엇을 묻나
+
+일곱 개. 각 질문은 **파일 시스템을 읽어서는 답을 알 수 없다**는 이유 하나로 거기 있다.
+마지막 둘은 읽어서 알 수 있지만, 그건 과거의 서술일 뿐이고 앞으로의 규칙으로 받아들일지는
+소유자가 정한다.
+
+|     | 질문                                                              | 답이 비면                              |
+| --- | ----------------------------------------------------------------- | -------------------------------------- |
+| Q1  | 이 레포는 뭘 하는 것인가, 한 줄로                                 | 자리표시자를 남기고 보고서에 밝힌다    |
+| Q2  | 코드가 레포 바깥으로 나가거나 되돌릴 수 없게 실패하는 지점이 있나 | Safety Boundaries 섹션을 만들지 않는다 |
+| Q3  | 검증에서 모델이 스스로 알아낼 수 없는 것이 있나                   | verification 스킬을 만들지 않는다      |
+| Q4  | 경계 규칙을 `error`로 막을까 `warn`으로 시작할까                  | 빈 레포는 error, 코드가 있으면 warn    |
+| Q5  | 규칙을 이미 어기고 있는데 당장 못 고치는 곳이 있나                | architecture.md를 만들지 않는다        |
+| Q6  | 슬라이스는 index로만 닿나, 안쪽 파일을 직접 import하나            | 레포를 읽어 제안하고 확인받는다        |
+| Q7  | 같은 레이어의 형제 슬라이스끼리 import해도 되나                   | 레포를 읽어 제안하고 확인받는다        |
+
+**"답이 비면" 열이 이 플러그인의 절반이다.** 빈 답에 대한 올바른 산출물은 대개 산출물 없음이다.
+지어낸 Safety Boundary는 읽는 사람에게 그 섹션을 건너뛰는 법을 가르친다.
+
+## 빈 Gotcha는 버그가 아니다
+
+세팅 직후 Gotcha 섹션은 비어 있다. 의도한 것이다. gotcha는 정의상 레포 안에서 겪어봐야 아는
+것이고, 새 레포에는 아직 없다. 추측으로 채운 gotcha는 틀린 gotcha이며,
+**틀린 gotcha는 빈 섹션보다 나쁘다.**
+
+판정 기준은 [Gotcha와 repo-visible](/thinkit/docs/principles/gotcha-vs-repo-visible/)에 있다.
