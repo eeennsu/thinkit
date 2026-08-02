@@ -169,6 +169,33 @@ console.log("CLAUDE.md import");
     readFileSync(join(tmp, "CLAUDE.md"), "utf8").trim() === "@AGENTS.md",
     readFileSync(join(tmp, "CLAUDE.md"), "utf8").slice(0, 80));
 
+  // 함정 제목이 어디에도 없을 때. 포인터에 붙이면 그 제목은 규칙이 사는 파일이 아니라
+  // 규칙을 가리키는 파일에 앉는다 — 실제 레포에서 CLAUDE.md가 `@AGENTS.md`와 빈 함정
+  // 제목 한 쌍이 되어 나왔다.
+  writeFileSync(join(tmp, "CLAUDE.md"), "@AGENTS.md\n");
+  writeFileSync(join(tmp, "AGENTS.md"), "# Agents\n\n규칙 하나.\n");
+  execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--fix"],
+    { encoding: "utf8" });
+  ok("빠진 함정 제목이 포인터가 아니라 import된 파일로 간다",
+    /^##\s+함정\s*$/m.test(readFileSync(join(tmp, "AGENTS.md"), "utf8")),
+    readFileSync(join(tmp, "AGENTS.md"), "utf8"));
+  ok("포인터는 여전히 import 한 줄이다",
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").trim() === "@AGENTS.md",
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8").slice(0, 80));
+
+  // 포인터가 자기 산문도 지니면 어느 쪽이 하네스인지 우리가 모른다. 그때는 CLAUDE.md에
+  // 남긴다 — 모르면서 남의 파일을 고르지 않는다.
+  writeFileSync(join(tmp, "CLAUDE.md"), "# 규칙\n\n@AGENTS.md\n\n여기에도 규칙이 있다.\n");
+  writeFileSync(join(tmp, "AGENTS.md"), "# Agents\n\n규칙 하나.\n");
+  execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--fix"],
+    { encoding: "utf8" });
+  ok("import한 쪽에 산문이 있으면 제목은 CLAUDE.md에 남는다",
+    /^##\s+함정\s*$/m.test(readFileSync(join(tmp, "CLAUDE.md"), "utf8")) &&
+      !/함정/.test(readFileSync(join(tmp, "AGENTS.md"), "utf8")),
+    readFileSync(join(tmp, "CLAUDE.md"), "utf8"));
+
   // 순환은 스택이 무너질 때까지 재귀하지 않고 종료한다.
   writeFileSync(join(tmp, "CLAUDE.md"), "@A.md");
   writeFileSync(join(tmp, "A.md"), "alpha @B.md");
@@ -337,6 +364,37 @@ console.log("갈 곳 없는 답변");
     fired = /섹션이 사라졌다/.test(e.stdout ?? "");
   }
   ok("우리가 쓴 섹션을 지우면 여전히 오류가 난다", fired, "규칙이 자기가 존재하는 이유를 잡지 못하게 됐다");
+
+  // --fix는 제목만 되살린다. 발견이 error인 채로 측정되므로 종료 코드는 여전히 1이다.
+  const runFix = () => {
+    try {
+      return execFileSync(process.execPath,
+        [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--fix"],
+        { encoding: "utf8" });
+    } catch (e) {
+      return e.stdout ?? "";
+    }
+  };
+  runFix();
+  const repaired = readFileSync(join(tmp, "CLAUDE.md"), "utf8");
+  ok("--fix가 빠진 안전 경계 제목을 되살린다",
+    /^##\s+안전 경계\s*$/m.test(repaired), repaired);
+  // 매니페스트는 경계가 선언됐다는 것만 알지 무엇이었는지는 모른다. 알더라도 도로
+  // 펼치면 소유자가 일부러 지운 것을 되살리는 것이고, 그건 수리가 아니다.
+  ok("되살린 제목 아래는 비어 있다",
+    repaired.split(/^##\s+안전 경계\s*$/m)[1].split(/^##\s/m)[0].trim() === "",
+    repaired);
+  ok("제목이 돌아오면 규칙도 잠잠해진다",
+    !/섹션이 사라졌다/.test(runFix()));
+
+  // 두 제목이 함께 빠진 경우. 처치가 메모리에 든 옛 내용에 덧붙이면 나중 것이 먼저
+  // 쓴 제목을 지운다 — 둘 다 살아 있는지가 그 확인이다.
+  writeFileSync(join(tmp, "CLAUDE.md"),
+    repaired.replace(/^##\s+안전 경계\s*$/m, "").replace(/^##\s+함정\s*$/m, ""));
+  runFix();
+  const both = readFileSync(join(tmp, "CLAUDE.md"), "utf8");
+  ok("제목이 둘 다 빠져 있으면 둘 다 돌아온다",
+    /^##\s+함정\s*$/m.test(both) && /^##\s+안전 경계\s*$/m.test(both), both);
 }
 
 console.log("경고에 실패하는 레포에서의 warn");
