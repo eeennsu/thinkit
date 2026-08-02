@@ -1,44 +1,51 @@
-규칙을 미리 적어두는 배치가 어떤 모습인지 보여주는 발췌다. 아래 두 규칙은 둘 다 ESLint가
-판정할 수 있다 — `prefer-const`와 `no-else-return`.
+같은 레포를 예전 정석대로 세팅하면 이렇게 된다. 규칙을 미리, 많이, 문서에 적는다.
+아래는 그 파일의 앞부분이다 — 이런 파일은 대개 여기서 끝나지 않는다.
 
-````markdown title="AGENTS.md (발췌)"
-### Variables
+```markdown title="AGENTS.md"
+# Storefront
 
-Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.
+재고와 주문을 다루는 사내 커머스 프런트엔드.
 
-```ts
-// Good
-const foo = condition ? 1 : 2
+## 코드 스타일
 
-// Bad
-let foo
-if (condition) foo = 1
-else foo = 2
+- 들여쓰기는 스페이스 2칸, 세미콜론은 생략한다.
+- 재할당하지 않는 값은 `const`로 선언한다.
+- `else`를 피하고 이른 반환을 쓴다.
+- `any`를 쓰지 않는다. 모르겠으면 `unknown`으로 두고 좁힌다.
+- import에 별칭을 붙이지 않고, `import * as`도 쓰지 않는다.
+- 사용하지 않는 변수와 import를 남기지 않는다.
+
+## 파일 배치
+
+- 컴포넌트는 `src/components`, 훅은 `src/hooks`에 둔다.
+- 슬라이스 안쪽 파일을 밖에서 직접 import하지 않는다. index를 거친다.
+- 하위 레이어에서 상위 레이어를 import하지 않는다.
+
+## 작업 방식
+
+- 코드를 고치기 전에 관련 파일을 먼저 읽는다.
+- 답을 내기 전에 한 번 더 검토한다.
+- 확실하지 않으면 추측하지 말고 물어본다.
+- 사소한 것까지 묻지 말고 판단해서 진행한다.
+- 커밋 메시지는 `type(scope): summary` 형식으로 쓴다.
+- 작업이 끝나면 테스트를 돌리고 결과를 보고한다.
+
+## 테스트
+
+...
 ```
 
-### Control Flow
+앞의 두 섹션은 **전부 도구가 판정한다.** 들여쓰기와 세미콜론은 포매터가, `const`·`else`·`any`·
+별칭 import·미사용 변수는 린터가, 레이어와 슬라이스 경계는 import 규칙이 잡는다. 도구가 잡으면
+어기는 순간 빨간 줄이 뜬다. 문서가 잡으면 매 요청마다 읽히고도 안 지켜질 수 있다.
 
-Avoid `else` statements. Prefer early returns.
+"작업 방식"의 두 줄은 서로 반대다 — 확실하지 않으면 물어보라는 줄과, 사소한 것은 묻지 말고
+판단하라는 줄. 사람은 상황으로 구분하지만 모델은 매 요청마다 어느 쪽인지 판정해야 하고, 그
+판정에 추론을 쓴다. 충돌은 답을 틀리게 만들기보다 **요금을 청구한다.** "한 번 더 검토한다"는
+모델이 이미 하는 일이라 비용만 더한다.
 
-```ts
-// Good
-function foo() {
-  if (condition) return 1
-  return 2
-}
+남는 것은 첫 줄 하나다. 이 레포가 무엇을 하는지는 파일 시스템을 읽어서 알 수 없고, 도구로
+강제할 수도 없다.
 
-// Bad
-function foo() {
-  if (condition) return 1
-  else return 2
-}
-```
-````
-
-인용 대상은 활발히 관리되는 공개 프로젝트다. 이 레포가 틀렸다는 예가 아니다 —
-**규칙을 미리 많이 주는 것이 정석이던 배치**가 실제로 어떤 모양인지 보여주는 예다.
-
-- 출처: [anomalyco/opencode — AGENTS.md](https://github.com/anomalyco/opencode/blob/f44423609b03a47baf8a771c821a1de17046309f/AGENTS.md)
-- 인용 시점: 2026-08-02
-- 라이선스: MIT
-- 발췌 범위: 66~96행 (전문 아님)
+이 예시는 특정 레포에서 가져온 것이 아니라, 오른쪽과 같은 레포를 예전 방식으로 적으면 어떻게
+되는지 우리가 쓴 것이다. 비교에서 달라지는 변수를 **배치 하나로** 두기 위해서다.

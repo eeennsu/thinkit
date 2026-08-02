@@ -8,7 +8,7 @@
 //   node scripts/verify-links.mjs                  링크·앵커·라우트. base가 있으면 접두사까지
 //   node scripts/verify-links.mjs --base /x        그 판정을 덮어쓴다 (대조군이 쓰는 자리)
 //   node scripts/verify-links.mjs --search 충돌,경계 pagefind 인덱스에 실제 질의
-//   node scripts/verify-links.mjs --ui             라벨·permalink·인용 시점·img alt
+//   node scripts/verify-links.mjs --ui             라벨·자리표시자·인용 permalink·인용 시점·img alt
 //   node scripts/verify-links.mjs --ui --contrast  위 + 강조색 대비비 (라이트/다크 각각)
 //   node scripts/verify-links.mjs --self-test      일부러 깨뜨린 픽스처에서 exit 1이 나오는지
 import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -61,6 +61,9 @@ const LABEL_BEFORE = "Before — 예전 정석";
 const LABEL_AFTER = "After — thinkit이 생성한 것";
 const PERMALINK = /\/blob\/[0-9a-f]{40}\//;
 const CITED_AT = /\b20\d{2}-\d{2}-\d{2}\b/;
+// 인용이 있는지부터 본다. Before가 남의 레포 발췌였을 때는 인용이 항상 있었지만, 지금은
+// 우리가 쓴 예시라서 없다. 링크가 있을 때만 인용 계약을 적용한다.
+const CITE_LINK = /github\.com\/[^\s"'<]+\/blob\//;
 
 // ---------------------------------------------------------------- 수집
 
@@ -201,25 +204,28 @@ function checkUi(dist) {
     if (!html.includes(label)) problems.push({ code: "UI_LABEL", message: `랜딩에 라벨 "${label}" 가 없다` });
   }
 
-  // U4 U5 — 인용 블록에만 적용한다. blob/main 은 대상 레포가 파일을 고치는 순간
-  // 인용이 거짓이 되므로 sha 고정만 통과시킨다.
   const before = sampleBlock(html, "before");
   if (!before) {
     problems.push({ code: "UI_LABEL", message: '랜딩에 data-sample="before" 블록이 없다' });
-  } else {
-    // 자리표시자는 인용이 틀린 것이 아니라 아직 없는 것이다. 두 실패의 원인이 같으므로
-    // 같은 문장을 달아준다 — 안 그러면 permalink 형식이 틀린 것처럼 읽힌다.
-    const pending = /class="sample-pending"/.test(before)
-      ? " — Before 블록이 아직 자리표시자다. src/content/samples/before.md 를 채운다"
-      : "";
+  } else if (/class="sample-pending"/.test(before)) {
+    // 자리표시자는 인용이 틀린 것이 아니라 Before 자체가 아직 없는 것이다. 예전에는 permalink
+    // 검사가 이걸 곁다리로 잡았는데, 인용이 선택이 된 지금은 곁다리가 사라진다. 직접 본다.
+    problems.push({
+      code: "UI_PENDING",
+      message: "Before 블록이 자리표시자다. src/content/samples/before.md 를 채운다",
+    });
+  } else if (CITE_LINK.test(before)) {
+    // U4 U5 — 인용이 있을 때만 적용한다. 지금 Before는 우리가 쓴 예시라 인용이 없지만,
+    // 검사를 지우면 다음에 인용을 다시 넣는 사람을 아무도 막지 않는다. blob/main 은 대상
+    // 레포가 파일을 고치는 순간 인용이 거짓이 되므로 sha 고정만 통과시킨다.
     if (!PERMALINK.test(before)) {
       problems.push({
         code: "UI_PERMALINK",
-        message: `Before 블록에 blob/<40자 sha>/ permalink 가 없다 (blob/main 은 통과시키지 않는다)${pending}`,
+        message: "Before 블록이 레포 파일을 인용하는데 blob/<40자 sha>/ 가 아니다 (blob/main 은 통과시키지 않는다)",
       });
     }
     if (!CITED_AT.test(before)) {
-      problems.push({ code: "UI_CITED_AT", message: `Before 블록에 인용 시점(YYYY-MM-DD) 이 없다${pending}` });
+      problems.push({ code: "UI_CITED_AT", message: "Before 블록이 인용을 담고 있는데 인용 시점(YYYY-MM-DD) 이 없다" });
     }
   }
 
@@ -457,6 +463,28 @@ async function selfTest() {
       args: () => {
         const d = buildFixture(dist("no-cited-at"));
         patch(join(d, "index.html"), "인용 시점: 2026-08-02", "인용 시점: 언젠가");
+        return ["--dist", d, "--ui"];
+      },
+    },
+    {
+      // 인용 계약은 조건부다. 인용이 없는 Before가 막히면 자작 샘플을 실을 수 없고,
+      // 이 대조군이 없으면 조건부로 바꾼 것이 "항상 통과"와 구분이 안 된다.
+      name: "no-citation-ok",
+      expect: null,
+      args: () => {
+        const d = buildFixture(dist("no-citation-ok"));
+        patch(join(d, "index.html"), /<p>출처:[^<]*<\/p>/, "");
+        patch(join(d, "index.html"), /<p>인용 시점:[^<]*<\/p>/, "");
+        return ["--dist", d, "--ui"];
+      },
+    },
+    {
+      // 인용이 선택이 된 뒤에도 "Before가 아직 없다"는 계속 잡혀야 한다.
+      name: "pending-before",
+      expect: "UI_PENDING",
+      args: () => {
+        const d = buildFixture(dist("pending-before"));
+        patch(join(d, "index.html"), /<p>출처:[^<]*<\/p>/, '<p class="sample-pending">아직 없다</p>');
         return ["--dist", d, "--ui"];
       },
     },
