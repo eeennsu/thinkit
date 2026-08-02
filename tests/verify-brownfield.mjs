@@ -182,6 +182,28 @@ console.log("CLAUDE.md import");
     cycled = false;
   }
   ok("import 사이의 순환이 종료한다", cycled);
+
+  // 펜스를 마스킹하는 자리표시자는 산문에 나타날 수 없는 것이어야 한다. 구분자가
+  // 공백이면 (`" 0 "`) 산문 안의 "공백-숫자-공백"이 전부 fences 인덱스로 매칭되고,
+  // 되돌리기가 펜스 블록을 산문 한가운데에 복제해 넣는다. 오염된 본문은 --json에
+  // 실리지 않으므로 출력에서 "undefined"를 찾는 것으로는 잡히지 않는다. 발견 개수로
+  // 잡는다: 트리가 든 블록 하나에 구조 발견 하나다.
+  //
+  // 산문의 숫자는 0이어야 한다. 첫 자리표시자가 0번이고, 그것이 실제로 무언가로
+  // 치환되는 유일한 인덱스다.
+  rmSync(tmp, { recursive: true, force: true });
+  mkdirSync(tmp, { recursive: true });
+  writeFileSync(join(tmp, "CLAUDE.md"), [
+    "# t", "", "재시도는 0 회다.", "",
+    "```", "src/", "├── a", "└── b", "```", "", "## 함정", "",
+  ].join("\n"));
+  const maskFindings = JSON.parse(execFileSync(process.execPath,
+    [join(root, "scripts/check.mjs"), "--mode", "principles", "--target", tmp, "--json"],
+    { encoding: "utf8" })).findings.filter((f) => f.id === "claude-md.repo-visible.structural");
+  ok("펜스는 마스킹된 뒤 되돌아온다", maskFindings.length >= 1,
+    "펜스가 복원되지 않아 그 안의 트리가 탐지되지 않았다");
+  ok("되돌리기가 산문의 숫자에 매칭되지 않는다", maskFindings.length === 1,
+    `블록이 하나인데 구조 발견 ${maskFindings.length}건 - 자리표시자가 산문에도 매칭돼 펜스가 복제됐다`);
 }
 
 console.log("레이어 디렉터리");

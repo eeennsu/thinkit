@@ -85,7 +85,7 @@ const readIf = (p) => (existsSync(join(target, p)) ? readFileSync(join(target, p
 function expandImports(text, seen = new Set(), depth = 0) {
   if (depth > 5) return text;
   const fences = [];
-  const masked = text.replace(/```[\s\S]*?```/g, (m) => ` ${fences.push(m) - 1} `);
+  const masked = text.replace(/```[\s\S]*?```/g, (m) => `\0${fences.push(m) - 1}\0`);
   const expanded = masked.replace(/(^|\s)@([\w.][\w./-]*)/g, (whole, lead, rel) => {
     if (rel.includes("..") || seen.has(rel)) return whole;
     const body = readIf(rel);
@@ -93,7 +93,7 @@ function expandImports(text, seen = new Set(), depth = 0) {
     seen.add(rel);
     return `${lead}${expandImports(body, seen, depth + 1)}`;
   });
-  return expanded.replace(/ (\d+) /g, (_, i) => fences[Number(i)]);
+  return expanded.replace(/\0(\d+)\0/g, (_, i) => fences[Number(i)]);
 }
 
 // raw는 디스크에 있는 것이자 --fix가 되쓸 수 있는 것이고, expanded는 모델이 실제로
