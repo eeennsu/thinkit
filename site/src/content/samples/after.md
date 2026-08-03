@@ -1,8 +1,4 @@
-```text title="CLAUDE.md"
-@AGENTS.md
-```
-
-```markdown title="AGENTS.md"
+```markdown title="CLAUDE.md"
 # Storefront
 
 재고와 주문을 다루는 사내 커머스 프런트엔드.
@@ -23,17 +19,4 @@
   레이어 경계, 슬라이스 격리, public API 접근은 eslint가 강제하므로 (`lint` 스크립트)
   일부러 여기 다시 적지 않는다.
 -->
-```
-
-`CLAUDE.md`가 한 줄인 것은 산문이 사라졌기 때문이 아니라 `AGENTS.md`로 옮겨갔기 때문이다.
-그래서 두 파일을 다 싣는다. 하나만 보이면 없어진 것처럼 읽힌다.
-
-```
-생성: /harness-bootstrap next
-     (node scripts/scaffold.mjs next --target <임시dir> --answers <답변.json>)
-플러그인 커밋: 8108ad47381cae9915f99c8a5843a9c95954f995
-생성 시점: 2026-08-02
-답변: Q1 한 줄 · Q2 안전 경계 1개 · 나머지는 비움
-측정: AGENTS.md 88토큰 (측정했을 뿐 판정하지 않음: 예산을 제시하는 1차 소스가 없다)
-      같은 실행의 report.mjs 출력에서 그대로 옮겼다
 ```
