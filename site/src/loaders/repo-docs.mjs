@@ -11,9 +11,27 @@ export const repoRoot = resolve(here, "../../..");
 
 // 소스 -> 라우트. 이 표가 라우트의 유일한 정의이고, remark 플러그인도 여기서 읽는다.
 // 표를 두 벌 두면 링크 변환과 실제 라우트가 갈라지고, 갈라진 링크는 404로 배포된다.
+//
+// exclude는 "레포에는 있지만 사이트에는 안 내보낸다"는 뜻이다. 지우는 것이 아니라 발행하지
+// 않는 것이라, 링크 대상으로는 계속 정당하고 GitHub 원본으로 간다 (아래 githubUrlForRepoFile).
+// 오타를 내면 아무것도 제외되지 않는데, 그건 expectedRepoDocs가 개수로 잡는다.
 export const REPO_ROOTS = [
-  { dir: "docs", route: (name) => `docs/${name}` },
-  { dir: "docs/references", route: (name) => `docs/references/${name}` },
+  {
+    dir: "docs",
+    // 설계 기록과 캘리브레이션 메모는 판정 기준이 아니라 작업 로그다. 사이트의 일은 이
+    // 플러그인이 무엇인지 설명하는 것이고, 날짜가 박힌 600줄 개발 일지는 그 일을 하지
+    // 않으면서 사이드바 한 자리를 차지한다. 근거를 찾는 사람은 README에서 레포로 간다.
+    exclude: ["design-log.md", "calibration-notes.md"],
+    route: (name) => `docs/${name}`,
+  },
+  {
+    dir: "docs/references",
+    // 03은 2차 소스이고 개인 저자의 글이다. 나머지 셋은 Anthropic 1차 소스이고 판정의
+    // 근거로 문서가 계속 인용한다. 남의 글 1400줄을 우리 도메인에 재배포하는 것은 링크
+    // 썩음 대비와 다른 행위다 — 아카이브는 레포에 남고, 링크는 GitHub 원본으로 간다.
+    exclude: ["03-velog-claude-5-context-engineering-ko.md"],
+    route: (name) => `docs/references/${name}`,
+  },
   { dir: "principles", route: (name) => `docs/principles/${name}` },
   { file: "modules/fsd/rationale.md", route: "docs/modules/fsd-rationale" },
 ];
@@ -24,6 +42,11 @@ export const REPO_ROOTS = [
 // 그래서 GitHub 원본으로 보낸다 — 그리고 여기 없는 대상은 계속 throw다.
 export const GITHUB_BLOB = "https://github.com/eeennsu/thinkit/blob/main";
 export const REPO_FILE_LINKS = new Set(["CLAUDE.md", "README.md", "AGENTS.md"]);
+
+/** 발행하지 않기로 한 레포 문서. 매핑 표에서 파생한다 — 손으로 두 번 적으면 갈라진다. */
+function excludedDocs(roots = REPO_ROOTS) {
+  return new Set(roots.flatMap((e) => (e.dir ? (e.exclude ?? []).map((name) => `${e.dir}/${name}`) : [])));
+}
 
 const toPosix = (p) => p.split("\\").join("/");
 
@@ -45,6 +68,7 @@ export function routeForRepoFile(repoRelPath) {
     }
     if (posix.dirname(rel) !== entry.dir) continue;
     if (!rel.endsWith(".md")) continue;
+    if ((entry.exclude ?? []).includes(posix.basename(rel))) return null;
     return entry.route(posix.basename(rel, ".md"));
   }
   return null;
@@ -53,7 +77,7 @@ export function routeForRepoFile(repoRelPath) {
 /** 레포 루트 기준 상대 경로 -> 라우트가 없는 레포 파일의 GitHub 원본 URL. 아니면 null. */
 export function githubUrlForRepoFile(repoRelPath) {
   const rel = toPosix(repoRelPath).replace(/^\.\//, "");
-  if (!REPO_FILE_LINKS.has(rel)) return null;
+  if (!REPO_FILE_LINKS.has(rel) && !excludedDocs().has(rel)) return null;
   if (!existsSync(join(repoRoot, rel))) return null;
   return `${GITHUB_BLOB}/${rel}`;
 }
@@ -71,6 +95,7 @@ export function collectRepoFiles(roots = REPO_ROOTS) {
     if (!existsSync(absDir)) continue;
     const names = readdirSync(absDir)
       .filter((name) => name.endsWith(".md"))
+      .filter((name) => !(entry.exclude ?? []).includes(name))
       .filter((name) => statSync(join(absDir, name)).isFile())
       .sort();
     for (const name of names) {
