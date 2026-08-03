@@ -9,8 +9,8 @@
 
 ## 참조
 
-- 원칙과 그 근거 — [docs/principles.md](docs/principles.md)
-- 구조 패턴과 2차 소스 출처 분리 — [docs/structure-patterns.md](docs/structure-patterns.md)
+- 컨텍스트 엔지니어링 — [docs/canon.md](docs/canon.md)
+- 하네스 파일 배치 패턴 — [docs/structure-patterns.md](docs/structure-patterns.md)
 - 무엇을 왜 그렇게 정했는지 — [docs/design-log.md](docs/design-log.md)
 - 원문 아카이브 — [docs/references/](docs/references/)
 

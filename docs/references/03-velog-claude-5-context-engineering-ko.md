@@ -1,6 +1,9 @@
 <!--
   ARCHIVED SOURCE — 본문 원문 보존본. 요약·재구성 없음.
   네비게이션/푸터/관련글/뉴스레터 등 문서 외 요소만 제거했다.
+
+  원문 상단의 글 제목이 h4로 한 번 더 있었다 (썸네일 바로 위). velog 페이지가 제목을 두 번
+  찍는 것이지 본문이 두 번 말하는 것이 아니므로 문서 외 요소로 보고 지웠다. 위 h1이 그 제목이다.
 -->
 
 # Claude 5 시대의 Context Engineering: CLAUDE.md부터 Skills까지
@@ -11,10 +14,9 @@
 | Author | 이경규 (velog @kyu_ios_dev) |
 | Published | n/a |
 | Retrieved | 2026-08-01 |
-| Authority | 2차 (구조 제안 참고용 — 정본과 어긋나면 정본 우선) |
+| Authority | 외부 글 (구조 제안 참고용 — 정본과 어긋나면 정본 우선) |
 
 ---
-#### Claude 5 시대의 Context Engineering: CLAUDE.md부터 Skills까지
 
 ![원문 상단 썸네일 이미지](https://velog.velcdn.com/images/kyu_ios_dev/post/83d6186a-451a-4d6f-b52a-734ae95a883f/image.png)
 

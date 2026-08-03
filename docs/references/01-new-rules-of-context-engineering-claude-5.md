@@ -11,7 +11,7 @@
 | Author | Thariq Shihipar, Member of Technical Staff, Anthropic |
 | Published | 2026-07-24 |
 | Retrieved | 2026-08-01 |
-| Authority | 1차 (정본) |
+| Authority | Anthropic 공식 문서 (정본) |
 
 ---
 I’ve written previously about how to best [prompt the newest generation of Claude 5 models](https://claude.com/blog/a-field-guide-to-claude-fable-finding-your-unknowns) and work with them iteratively to discover what you want to build.

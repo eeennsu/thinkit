@@ -11,7 +11,7 @@
 | Author | Anthropic Applied AI team (Prithvi Rajasekaran, Ethan Dixon, Carly Ryan, Jeremy Hadfield) |
 | Published | n/a |
 | Retrieved | 2026-08-01 |
-| Authority | 1차 (정본) |
+| Authority | Anthropic 공식 문서 (정본) |
 
 ---
 After a few years of prompt engineering being the focus of attention in applied AI, a new term has come to prominence: **context engineering**. Building with language models is becoming less about finding the right words and phrases for your prompts, and more about answering the broader question of “what configuration of context is most likely to generate our model’s desired behavior?"

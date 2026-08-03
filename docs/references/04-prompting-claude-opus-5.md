@@ -12,8 +12,8 @@
 | Author | Anthropic (Claude Docs) |
 | Published | n/a |
 | Retrieved | 2026-08-01 |
-| Authority | 1차 (정본) |
-| 계층 | **프롬프트 계층.** [NR]·[ECE]가 컨텍스트 계층을 다루는 것과 구분된다. [principles.md §5](../principles.md) 참조 |
+| Authority | Anthropic 공식 문서 (정본) |
+| 계층 | **프롬프트 계층.** [NR]·[ECE]가 컨텍스트 계층을 다루는 것과 구분된다. [canon.md §5](../canon.md) 참조 |
 
 ---
 

@@ -7,20 +7,20 @@
 
 ## 왜 필요한가
 
-규칙을 미리 많이 주는 것이 정석이었다. 지금은 그 규칙들이 서로 충돌해 모델이 판정에 추론을
-쓰게 만든다. 충돌은 에이전트를 망가뜨리지 않고 **요금을 청구한다** — 답은 대체로 맞고,
-거기 도달하는 데 더 많이 쓴다.
+하네스 세팅의 일은 무엇을 적을지 고르는 것이 아니라 **무엇을 안 적어도 되는지 판정하는 것**이
+되었다. 미리 준 규칙들이 서로 충돌하면 모델은 판정에 추론을 쓰고, 그 충돌은 에이전트를
+망가뜨리는 대신 **요금을 청구한다.** 메커니즘과 Anthropic 공식 문서 인용은 [docs/canon.md §3](docs/canon.md)에
+있다.
 
-그래서 하네스 세팅의 일은 무엇을 적을지 고르는 것이 아니라 **무엇을 안 적어도 되는지
-판정하는 것**이 되었다. thinkit은 이 판정을 레포마다 처음부터 다시 하지 않도록 재사용 가능한
-형태로 묶은 것이다. **하네스를 대신 써주는 도구가 아니라, 계속 얇게 유지시켜주는 도구다.**
+thinkit은 이 판정을 레포마다 처음부터 다시 하지 않도록 재사용 가능한 형태로 묶은 것이다.
+**하네스를 대신 써주는 도구가 아니라, 계속 얇게 유지시켜주는 도구다.**
 
 그래서 실어 나르는 것도 완성된 규칙 문장이 아니라 **질문 세트와 판정 기준**이다. 세팅을 대신
 써주지 않는다. 레포 소유자만 답할 수 있는 것을 묻고, 그 답으로 구성한다. 미리 채운 템플릿을
 뿌리기 시작하는 순간 이 도구는 가이드가 지우라던 바로 그 파일을 스택마다 자동 생산하는
 도구가 된다.
 
-근거와 1차 소스는 [docs/principles.md](docs/principles.md)에, 지금 어느 모델 세대를 기준으로
+근거와 Anthropic 공식 문서 인용은 [docs/canon.md](docs/canon.md)에, 지금 어느 모델 세대를 기준으로
 판정하는지는 [calibration/index.json](calibration/index.json)에 있다.
 
 ## 설치
@@ -127,13 +127,13 @@ devDependency만 더한다 — **들여쓰기와 키 순서는 그 레포 것을
 
 ## 더 읽을 것
 
-|                               |                                                          |
-| ----------------------------- | -------------------------------------------------------- |
-| 원칙과 그 근거                | [docs/principles.md](docs/principles.md)                 |
-| 구조 패턴, 2차 소스 출처 분리 | [docs/structure-patterns.md](docs/structure-patterns.md) |
-| 무엇을 왜 그렇게 정했는지     | [docs/design-log.md](docs/design-log.md)                 |
-| 세대 의존 값의 위치           | [docs/calibration-notes.md](docs/calibration-notes.md)   |
-| 원문 아카이브                 | [docs/references/](docs/references/)                     |
+|                           |                                                          |
+| ------------------------- | -------------------------------------------------------- |
+| 컨텍스트 엔지니어링       | [docs/canon.md](docs/canon.md)                           |
+| 하네스 파일 배치 패턴     | [docs/structure-patterns.md](docs/structure-patterns.md) |
+| 무엇을 왜 그렇게 정했는지 | [docs/design-log.md](docs/design-log.md)                 |
+| 세대 의존 값의 위치       | [docs/calibration-notes.md](docs/calibration-notes.md)   |
+| 원문 아카이브             | [docs/references/](docs/references/)                     |
 
 기여자가 어기면 안 되는 것은 [CLAUDE.md](CLAUDE.md)에 있다. 한 규칙에 소유자는 하나다.
 

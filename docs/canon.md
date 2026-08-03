@@ -1,6 +1,10 @@
-# Principles
+# 컨텍스트 엔지니어링
 
-Claude 5 세대 컨텍스트 엔지니어링의 정본 원칙. 이 문서의 모든 주장은 아래 1차 소스에서만 온다.
+Claude 5 세대 컨텍스트 엔지니어링의 정본. 이 문서의 모든 주장은 아래 Anthropic 공식 문서에서만 온다.
+
+이 문서는 세대에 묶여 있다. 세대가 바뀌면 여기 적힌 것 중 일부가 틀린다. 세대와 무관한
+판정 기준은 `principles/`에 따로 살고, 그쪽은 이 문서가 바뀌어도 그대로다 — 이름이 비슷하지만
+다른 것이다.
 
 | 약칭 | 문서 | 원문 |
 | --- | --- | --- |
@@ -8,7 +12,7 @@ Claude 5 세대 컨텍스트 엔지니어링의 정본 원칙. 이 문서의 모
 | **[ECE]** | Effective context engineering for AI agents | [references/02](references/02-effective-context-engineering-for-ai-agents.md) |
 | **[P5]** | Prompting Claude Opus 5 | [references/04](references/04-prompting-claude-opus-5.md) |
 
-2차 소스에서 유래한 구조 제안은 이 문서에 들어오지 않는다. [structure-patterns.md](structure-patterns.md)에 분리해 두었다.
+외부 글에서 유래한 구조 제안은 이 문서에 들어오지 않는다. [structure-patterns.md](structure-patterns.md)에 분리해 두었다.
 
 **[P5]는 계층이 다르다.** [NR]·[ECE]는 컨텍스트 계층(CLAUDE.md·Skills·References)을 다루고, [P5]는 프롬프트 계층(응답 길이, 나레이션, effort, thinking 비활성 시 아티팩트)을 다룬다. 하네스 세팅과 무관한 절 — vision, effort sweep, 툴콜 텍스트 누출 — 은 이 문서로 올라오지 않았다. 올라온 것은 [§5](#5-모델이-이미-하는-일을-지시하지-않는다)에 모았다.
 
