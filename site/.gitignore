@@ -3,3 +3,7 @@
 # 같이 따라가기 때문이다.
 dist/
 .astro/
+
+# 공유 카드 이미지. scripts/og-image.mjs 가 custom.css 의 색을 읽어 빌드 전에 만든다.
+# 커밋하면 강조색을 바꿨을 때 PNG만 옛 색으로 남고, 그 사실은 공유해 보기 전에는 모른다.
+public/og.png

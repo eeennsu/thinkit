@@ -2,11 +2,17 @@
 title: thinkit
 description: 레포의 하네스 세팅을 자동화하는 Claude Code 플러그인. 세팅을 대신 써주지 않고, 레포 소유자가 답해야 정해지는 것을 묻는다.
 template: splash
+# 문서 제목이 사이트 이름과 같아서 Starlight가 "thinkit | thinkit"을 만든다. 탭·검색결과·공유
+# 카드에 그대로 나가는 문자열이다. h1과 헤더 표기는 그대로 두고 title만 덮는다 — Starlight는
+# head의 title을 기본값과 합치지 않고 교체한다.
+head:
+  - tag: title
+    content: thinkit — 하네스 세팅을 묻는 Claude Code 플러그인
 hero:
-  tagline: CLAUDE.md를 만들어주는 도구가 아니라, 계속 얇게 유지시켜주는 도구다.
+  tagline: 하네스를 대신 써주는 도구가 아니라, 계속 얇게 유지시켜주는 도구다.
   actions:
     - text: 문서 보기
-      link: /docs/principles/
+      link: /docs/canon/
       variant: primary
     - text: 설치
       link: "#설치"
@@ -27,7 +33,7 @@ import BeforeAfter from "../../components/BeforeAfter.astro";
 거기 도달하는 데 더 많이 쓴다.
 
 그래서 하네스 세팅의 일은 무엇을 적을지 고르는 것이 아니라 **무엇을 안 적어도 되는지
-판정하는 것**이 되었다. 근거와 1차 소스는 [원칙 문서 §3](/docs/principles/#3-지시-충돌이-왜-비용인가)에 있다.
+판정하는 것**이 되었다. 근거와 Anthropic 공식 문서 인용은 [정본 §3](/docs/canon/#3-지시-충돌이-왜-비용인가)에 있다.
 
 ## 설치
 

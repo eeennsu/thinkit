@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
+    "og": "node scripts/og-image.mjs",
+    "prebuild": "node scripts/og-image.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "verify:links": "node scripts/verify-links.mjs"

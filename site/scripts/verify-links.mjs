@@ -5,7 +5,9 @@
 // dist를 걷는 스크립트는 이것 하나다. 둘로 나누면 기대 라우트 목록이 두 곳에 생기고,
 // 두 곳은 갈라진다.
 //
-//   node scripts/verify-links.mjs                  링크·앵커·라우트. base가 있으면 접두사까지
+//   node scripts/verify-links.mjs                  링크·앵커·라우트·산출물 계약(제목 중복·영어
+//                                                  제목·내부 절대 URL·og:image·robots.txt).
+//                                                  base가 있으면 접두사까지
 //   node scripts/verify-links.mjs --base /x        그 판정을 덮어쓴다 (대조군이 쓰는 자리)
 //   node scripts/verify-links.mjs --search 충돌,경계 pagefind 인덱스에 실제 질의
 //   node scripts/verify-links.mjs --ui             라벨·자리표시자·인용 permalink·인용 시점·img alt
@@ -18,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { collectRepoFiles } from "../src/loaders/repo-docs.mjs";
+import { readThemeColors } from "./theme-colors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const siteRoot = resolve(here, "..");
@@ -44,6 +47,15 @@ function configuredBase() {
   const config = readFileSync(join(siteRoot, "astro.config.mjs"), "utf8");
   const match = config.match(/export const BASE\s*=\s*["'`]([^"'`]*)["'`]/);
   if (!match) throw new Error("verify-links: astro.config.mjs 에서 BASE 를 찾지 못했다.");
+  return match[1].replace(/\/+$/, "");
+}
+
+// 도메인도 astro.config.mjs 하나에서 온다. 여기 다시 적으면 도메인을 옮긴 날 검사기만
+// 옛 도메인을 찾고, 새 도메인으로 박힌 내부 절대 링크를 그냥 통과시킨다.
+function configuredSite() {
+  const config = readFileSync(join(siteRoot, "astro.config.mjs"), "utf8");
+  const match = config.match(/export const SITE\s*=\s*["'`]([^"'`]*)["'`]/);
+  if (!match) throw new Error("verify-links: astro.config.mjs 에서 SITE 를 찾지 못했다.");
   return match[1].replace(/\/+$/, "");
 }
 
@@ -244,6 +256,84 @@ function checkUi(dist) {
   return problems;
 }
 
+// ---------------------------------------------------------------- 산출물 계약
+//
+// 아래 넷은 전부 dist만 보면 판정된다. 사람이 스크린샷을 봐야 아는 것이 아니라서 여기 있다 —
+// 레포 규칙이 "도구로 강제 가능한 건 문서에서 뺀다"이고, 이것들은 한 번 고친 뒤 조용히
+// 되돌아오는 종류다.
+
+// 제목이 영어인지 판정하려면 한글이 있는지를 본다. 그런데 두 종류는 한글이 없는 것이 옳다.
+// 예외를 안 적으면 이 검사는 옳은 것을 잡느라 꺼지게 된다.
+//
+//   docs/references/*  아카이브. 제목은 원저자의 것이고 우리가 번역하지 않는다.
+//   ""                 랜딩. h1이 워드마크 "thinkit"이다.
+//   404                숫자다.
+const TITLE_HANGUL_EXEMPT = (route) => route === "" || route === "404" || route.startsWith("docs/references/");
+const HANGUL = /[가-힣]/;
+
+const titleOf = (html) => html.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1]?.trim();
+const h1Of = (html) =>
+  html
+    .match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/)?.[1]
+    ?.replace(/<[^>]*>/g, "")
+    .trim();
+
+function checkMeta(dist) {
+  const problems = [];
+  const site = configuredSite();
+  const rel = (file) => relative(dist, file).split("\\").join("/");
+  const routeOf = (file) => rel(file).replace(/(^|\/)index\.html$/, "").replace(/\.html$/, "");
+
+  for (const file of htmlFiles(dist)) {
+    const html = readFileSync(file, "utf8");
+    const route = routeOf(file);
+
+    // D1 — 문서 제목이 사이트 이름과 같으면 Starlight가 "thinkit | thinkit"을 만든다. 조각을
+    // 세는 이유는 사이트 이름을 여기 적지 않기 위해서다. 같은 조각이 두 번이면 무엇이든 중복이다.
+    const title = titleOf(html);
+    if (!title) {
+      problems.push({ code: "META_TITLE", message: `${rel(file)}: <title> 이 없다` });
+    } else {
+      const parts = title.split("|").map((s) => s.trim()).filter(Boolean);
+      const dupe = parts.find((p, i) => parts.indexOf(p) !== i);
+      if (dupe) problems.push({ code: "META_TITLE", message: `${rel(file)}: <title> 에 "${dupe}" 가 두 번 — "${title}"` });
+    }
+
+    // D2 — 로케일이 한국어 하나뿐인데 우리가 쓴 문서 제목만 영어로 남는 일이 있었다.
+    const h1 = h1Of(html);
+    if (h1 && !TITLE_HANGUL_EXEMPT(route) && !HANGUL.test(h1)) {
+      problems.push({ code: "META_LANG", message: `/${route}: h1 "${h1}" 에 한글이 없다 (아카이브·랜딩·404만 예외)` });
+    }
+
+    // D3 — 본문이 자기 사이트를 절대 URL로 가리키면 도메인이 바뀔 때 죽고, 프리뷰에서 누르면
+    // 프로덕션으로 튄다. canonical·og:url은 절대여야 하므로 <a> 만 본다.
+    for (const m of html.matchAll(/<a\b[^>]*\shref="([^"]*)"/g)) {
+      if (m[1].startsWith(site)) {
+        problems.push({ code: "META_SELF_URL", message: `${rel(file)}: 내부 링크가 절대 URL이다 — ${m[1]}` });
+      }
+    }
+
+    // D4 — og:image가 빠지면 공유 카드가 빈 채로 나가고, 그건 공유해 보기 전에는 모른다.
+    // 있다고만 보지 않고 가리키는 파일이 dist 안에 실재하는지까지 본다.
+    const og = html.match(/<meta\s+property="og:image"\s+content="([^"]*)"/)?.[1];
+    if (!og) {
+      problems.push({ code: "META_OG", message: `${rel(file)}: og:image 가 없다` });
+    } else if (!og.startsWith(site)) {
+      problems.push({ code: "META_OG", message: `${rel(file)}: og:image 가 절대 URL이 아니다 — ${og}` });
+    } else if (!existsSync(join(dist, og.slice(site.length).replace(/^\//, "")))) {
+      problems.push({ code: "META_OG", message: `${rel(file)}: og:image 가 가리키는 ${og} 가 dist 에 없다` });
+    }
+  }
+
+  // D4 — robots.txt. 없으면 크롤러가 sitemap을 스스로 찾아야 한다.
+  const robots = join(dist, "robots.txt");
+  if (!existsSync(robots)) problems.push({ code: "META_ROBOTS", message: "dist/robots.txt 가 없다" });
+  else if (!/^\s*Sitemap:\s*\S+/im.test(readFileSync(robots, "utf8")))
+    problems.push({ code: "META_ROBOTS", message: "robots.txt 에 Sitemap: 줄이 없다" });
+
+  return problems;
+}
+
 // ---------------------------------------------------------------- 대비비
 
 const srgb = (v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
@@ -260,27 +350,18 @@ const contrastRatio = (a, b) => {
   return (hi + 0.05) / (lo + 0.05);
 };
 
-// custom.css 의 규약: `:root` 가 다크, `:root[data-theme="light"]` 가 라이트.
-// 각 블록의 --thinkit-accent 와 --thinkit-surface 가 전경/배경 쌍이다.
+// 색 규약을 읽는 법은 scripts/theme-colors.mjs 에 있다. OG 이미지 생성도 같은 것을 읽는다.
 function checkContrast(cssPath) {
   const problems = [];
   if (!existsSync(cssPath)) return [{ code: "CONTRAST", message: `${cssPath} 가 없다` }];
   const css = readFileSync(cssPath, "utf8");
 
-  const themes = [
-    { name: "dark", selector: /:root\s*\{([\s\S]*?)\}/ },
-    { name: "light", selector: /:root\[data-theme="light"\]\s*\{([\s\S]*?)\}/ },
-  ];
-
-  for (const theme of themes) {
-    const block = css.match(theme.selector);
-    if (!block) {
+  for (const theme of readThemeColors(css)) {
+    if (theme.missingBlock) {
       problems.push({ code: "CONTRAST", message: `${theme.name} 테마 블록을 찾지 못했다` });
       continue;
     }
-    const read = (name) => block[1].match(new RegExp(`--thinkit-${name}\\s*:\\s*(#[0-9a-fA-F]{3,8})`))?.[1];
-    const accent = read("accent");
-    const surface = read("surface");
+    const { accent, surface } = theme;
     if (!accent || !surface) {
       // var() 로 미룬 값은 여기서 볼 것이 없다. 못 읽은 것을 통과로 세면 검사가 사라진다.
       problems.push({
@@ -336,7 +417,13 @@ async function checkSearch(dist, terms) {
 // ---------------------------------------------------------------- 대조군
 
 const FIXTURE_LABELS = `<h3 class="sample-label">${LABEL_BEFORE}</h3>`;
-const fixturePage = (body) => `<!doctype html><html lang="ko"><body>${body}</body></html>\n`;
+
+// 픽스처는 "온전한 dist"여야 한다. 산출물 계약(제목·h1·og:image)을 빼놓으면 대조군이 그것만으로
+// 빨개지고, 그러면 이 파일의 다른 부정 케이스들이 무엇 때문에 빨간지 구분되지 않는다.
+const fixturePage = (body, { title = "제목 | thinkit", h1 = "한글 제목" } = {}) =>
+  `<!doctype html><html lang="ko"><head><title>${title}</title>` +
+  `<meta property="og:image" content="${configuredSite()}/og.png"></head>` +
+  `<body>${h1 === null ? "" : `<h1>${h1}</h1>`}${body}</body></html>\n`;
 
 // base를 인자로 받는다. 접두사 대조군은 astro.config가 지금 무엇이든 자기 접두사로
 // 픽스처를 세워야 한다 — 배포 경로가 루트로 내려간 순간 그 대조군이 아무것도 안 깨고
@@ -356,7 +443,7 @@ function buildFixture(dir, base = configuredBase()) {
   writeFileSync(
     join(dir, "index.html"),
     fixturePage(
-      `<a href="${base}/docs/principles/#3-지시-충돌이-왜-비용인가">원칙</a>` +
+      `<a href="${base}/docs/canon/#3-지시-충돌이-왜-비용인가">원칙</a>` +
         `<section class="sample" data-sample="before">${FIXTURE_LABELS}` +
         `<p>출처: https://github.com/owner/repo/blob/0123456789abcdef0123456789abcdef01234567/CLAUDE.md</p>` +
         `<p>인용 시점: 2026-08-02</p>` +
@@ -367,7 +454,9 @@ function buildFixture(dir, base = configuredBase()) {
     "utf8"
   );
   writeFileSync(join(dir, "x.png"), "", "utf8");
-  writeFileSync(join(dir, "404.html"), fixturePage("<p>없다</p>"), "utf8");
+  writeFileSync(join(dir, "404.html"), fixturePage("<p>없다</p>", { title: "404 | thinkit", h1: "404" }), "utf8");
+  writeFileSync(join(dir, "og.png"), "", "utf8");
+  writeFileSync(join(dir, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${configuredSite()}/sitemap-index.xml\n`, "utf8");
   return dir;
 }
 
@@ -400,7 +489,7 @@ async function selfTest() {
       expect: "LINK",
       args: () => {
         const d = buildFixture(dist("broken-link"));
-        patch(join(d, "index.html"), `${base}/docs/principles/`, `${base}/docs/nope/`);
+        patch(join(d, "index.html"), `${base}/docs/canon/`, `${base}/docs/nope/`);
         return ["--dist", d];
       },
     },
@@ -409,7 +498,7 @@ async function selfTest() {
       expect: "ANCHOR",
       args: () => {
         const d = buildFixture(dist("broken-anchor"));
-        patch(join(d, "docs/principles/index.html"), 'id="3-지시-충돌이-왜-비용인가"', 'id="다른-제목"');
+        patch(join(d, "docs/canon/index.html"), 'id="3-지시-충돌이-왜-비용인가"', 'id="다른-제목"');
         return ["--dist", d];
       },
     },
@@ -435,7 +524,7 @@ async function selfTest() {
       expect: "BASE",
       args: () => {
         const d = buildFixture(dist("missing-base"), "/thinkit");
-        patch(join(d, "index.html"), "/thinkit/docs/principles/", "/docs/principles/");
+        patch(join(d, "index.html"), "/thinkit/docs/canon/", "/docs/canon/");
         return ["--dist", d, "--base", "/thinkit"];
       },
     },
@@ -503,7 +592,7 @@ async function selfTest() {
       expect: "ANCHOR",
       args: () => {
         const d = buildFixture(dist("meta-name-is-not-an-anchor"));
-        patch(join(d, "docs/principles/index.html"), "<body>", '<body><meta name="description" content="x">');
+        patch(join(d, "docs/canon/index.html"), "<body>", '<body><meta name="description" content="x">');
         patch(join(d, "index.html"), "#3-지시-충돌이-왜-비용인가", "#description");
         return ["--dist", d];
       },
@@ -547,6 +636,79 @@ async function selfTest() {
           "utf8"
         );
         return ["--dist", d, "--ui", "--contrast", "--css", css];
+      },
+    },
+    {
+      // D1 — 문서 제목이 사이트 이름과 같을 때 Starlight가 만드는 모양 그대로.
+      name: "title-duplicated",
+      expect: "META_TITLE",
+      args: () => {
+        const d = buildFixture(dist("title-duplicated"));
+        patch(join(d, "index.html"), "<title>제목 | thinkit</title>", "<title>thinkit | thinkit</title>");
+        return ["--dist", d];
+      },
+    },
+    {
+      // D2 — 한국어 전용 사이트에 우리 문서 제목만 영어로 남는 경우.
+      name: "english-h1",
+      expect: "META_LANG",
+      args: () => {
+        const d = buildFixture(dist("english-h1"));
+        patch(join(d, "docs/canon/index.html"), "<h1>한글 제목</h1>", "<h1>Principles</h1>");
+        return ["--dist", d];
+      },
+    },
+    {
+      // D2 대조군 — 아카이브의 영어 제목은 원저자의 것이라 통과해야 한다. 예외가 실제로
+      // 동작하는지 보지 않으면 이 검사는 아카이브를 번역하라고 시키는 검사가 된다.
+      name: "english-h1-in-archive-ok",
+      expect: null,
+      args: () => {
+        const d = buildFixture(dist("english-h1-in-archive-ok"));
+        patch(
+          join(d, "docs/references/01-new-rules-of-context-engineering-claude-5/index.html"),
+          "<h1>한글 제목</h1>",
+          "<h1>The new rules of context engineering</h1>"
+        );
+        return ["--dist", d];
+      },
+    },
+    {
+      // D3 — 자기 사이트를 절대 URL로 가리키는 본문 링크.
+      name: "internal-absolute-link",
+      expect: "META_SELF_URL",
+      args: () => {
+        const d = buildFixture(dist("internal-absolute-link"));
+        patch(join(d, "index.html"), '<a href="', `<a href="${configuredSite()}/">홈</a><a href="`);
+        return ["--dist", d];
+      },
+    },
+    {
+      name: "og-image-missing",
+      expect: "META_OG",
+      args: () => {
+        const d = buildFixture(dist("og-image-missing"));
+        patch(join(d, "docs/canon/index.html"), /<meta property="og:image"[^>]*>/, "");
+        return ["--dist", d];
+      },
+    },
+    {
+      // 있다고만 보면 파일 이름을 바꾼 날 죽은 이미지를 초록으로 배포한다.
+      name: "og-image-dangling",
+      expect: "META_OG",
+      args: () => {
+        const d = buildFixture(dist("og-image-dangling"));
+        rmSync(join(d, "og.png"));
+        return ["--dist", d];
+      },
+    },
+    {
+      name: "robots-missing",
+      expect: "META_ROBOTS",
+      args: () => {
+        const d = buildFixture(dist("robots-missing"));
+        rmSync(join(d, "robots.txt"));
+        return ["--dist", d];
       },
     },
   ];
@@ -617,6 +779,9 @@ if (searchTerms.length) {
   );
   problems.push(...checkLinks(dist, base, { strictBase }));
   problems.push(...checkRoutes(dist));
+  // --ui 뒤에 두지 않는다. 이것들은 랜딩의 UI 계약이 아니라 배포되는 모든 쪽의 계약이고,
+  // 플래그 뒤에 숨은 검사는 그 플래그를 안 붙인 날 없는 검사다.
+  problems.push(...checkMeta(dist));
   if (has("ui")) {
     problems.push(...checkUi(dist));
     if (has("contrast")) problems.push(...checkContrast(resolve(siteRoot, opt("css", "src/styles/custom.css"))));

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://thinkit.eunsu.pro/sitemap-index.xml
