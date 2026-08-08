@@ -43,6 +43,18 @@ const PRETTIER_CONFIGS = [
   "prettier.config.cjs",
 ];
 
+// 경계 판정자 셋 중 eslint 밖에 있는 것. 인터뷰 Q0이 읽으라고 이름을 대는 셋 중 하나다.
+const DEPENDENCY_CRUISER_CONFIGS = [
+  ".dependency-cruiser.js",
+  ".dependency-cruiser.cjs",
+  ".dependency-cruiser.mjs",
+  ".dependency-cruiser.json",
+  ".dependency-cruiser.jsonc",
+  "dependency-cruiser.config.js",
+  "dependency-cruiser.config.cjs",
+  "dependency-cruiser.config.mjs",
+];
+
 // 설정 안의 객체 블록을 균형 잡힌 중괄호로 잘라낸다. 정규식으로 `files:`와 규칙 이름을
 // 따로 찾으면 둘이 같은 블록에 있었는지 알 수 없고, 그 정보가 없으면 `full`과 `partial`이
 // 구분되지 않는다. 문자열과 주석 안의 중괄호는 세지 않는다 — 메시지에 `{`가 든 규칙이
@@ -182,15 +194,48 @@ export function readEnforcement(target) {
         ? { state: "full", where: ["tsconfig.json (strict/noImplicitAny)"] }
         : anyRule;
 
-  // 레이어 방향. 플러그인이 설치되어 있고 설정이 그것을 참조할 때만.
-  const hasBoundaries = Boolean(deps["eslint-plugin-boundaries"]);
+  // 레이어 방향. 판정자는 셋이고, 셋 다 인터뷰 Q0이 읽으라고 이름을 대는 것들이다.
+  // 하나만 찾으면 그 하나를 쓰지 않는 레포가 전부 `none`으로 나오고, 그 `none`은
+  // "아무것도 강제하지 않는다"로 읽힌다. 이 플러그인이 고른 플러그인을 안 쓴다는 사실을
+  // 경계가 없다는 사실로 보고하는 것이고, 그것은 틀린 주장이다.
+  //
+  // 그래도 셋이 전부라고 주장하지는 않는다. 못 찾았을 때의 `why`가 무엇을 찾았는지
+  // 열거하는 이유가 그것이다 — 주장의 범위를 찾은 것에 맞춰 좁혀 둔다.
+  const layerJudges = [];
+  const layerMisses = [];
+
   const boundariesReferenced = eslintConfigs.some((c) => /boundaries/.test(c.text));
-  checks["layer-direction"] =
-    hasBoundaries && boundariesReferenced
-      ? { state: "full", where: ["eslint-plugin-boundaries"] }
-      : hasBoundaries
-        ? { state: "none", why: "eslint-plugin-boundaries가 설치만 되고 설정에서 쓰이지 않는다" }
-        : { state: "none", why: "eslint-plugin-boundaries가 없다" };
+  if (deps["eslint-plugin-boundaries"] && boundariesReferenced) layerJudges.push("eslint-plugin-boundaries");
+  else if (deps["eslint-plugin-boundaries"]) layerMisses.push("eslint-plugin-boundaries는 설치만 되고 설정에서 쓰이지 않는다");
+  else layerMisses.push("eslint-plugin-boundaries가 없다");
+
+  // `import/no-restricted-paths`는 규칙 하나이므로 스코프가 붙을 수 있고, 그러면
+  // 절반 강제다. 그 판정은 `verdict`이 소유한다. 플러그인이 없으면 판정자로 세지
+  // 않는다 — 설치되지 않은 플러그인을 참조하는 설정은 절반 강제가 아니라 크래시다.
+  let restrictedPaths = verdict(findRule(eslintConfigs, "import/no-restricted-paths"), ctx);
+  if (restrictedPaths.state === "unknown") layerMisses.push("eslint 설정을 읽지 못해 import/no-restricted-paths를 확인할 수 없다");
+  else if (restrictedPaths.state === "none") layerMisses.push("import/no-restricted-paths가 설정에 없다");
+  else if (!deps["eslint-plugin-import"]) {
+    layerMisses.push("import/no-restricted-paths가 설정에 있는데 eslint-plugin-import가 설치되어 있지 않다");
+    restrictedPaths = { state: "none" };
+  } else if (restrictedPaths.state === "full") layerJudges.push("import/no-restricted-paths");
+  else layerMisses.push(`import/no-restricted-paths가 ${restrictedPaths.why}`);
+
+  // dependency-cruiser는 eslint 밖이라 포매터와 같은 조건이 붙는다. 설정만으로는
+  // 강제가 아니고, 그것을 부르는 명령이 있어야 한다.
+  const cruiserConfig = DEPENDENCY_CRUISER_CONFIGS.find((p) => readIf(p) !== null);
+  const cruiserRuns = /\b(depcruise|dependency-cruiser)\b/.test(scriptText);
+  if (cruiserConfig && cruiserRuns) layerJudges.push(`dependency-cruiser (${cruiserConfig})`);
+  else if (cruiserConfig) layerMisses.push(`${cruiserConfig}는 있는데 어떤 스크립트도 dependency-cruiser를 부르지 않는다`);
+  else layerMisses.push("dependency-cruiser 설정이 없다");
+
+  checks["layer-direction"] = layerJudges.length
+    ? { state: "full", where: layerJudges }
+    : restrictedPaths.state === "partial"
+      ? { state: "partial", where: restrictedPaths.where, why: restrictedPaths.why }
+      : configsRead || cruiserConfig
+        ? { state: "none", why: `찾은 판정자가 없다 — ${layerMisses.join("; ")}` }
+        : { state: "unknown", why: "읽을 수 있는 eslint 설정도 dependency-cruiser 설정도 없다" };
 
   // 슬라이스 격리와 상대경로 금지는 같은 규칙 하나로 막는 레포가 많다. 스코프가 붙어
   // 있으면 절반 강제이고, 그 판정이 여기 있는 이유의 절반이다.

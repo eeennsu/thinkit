@@ -41,6 +41,7 @@ description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에
 | `claude-md.memory-log` | `${CLAUDE_PLUGIN_ROOT}/principles/ownership-map.md` |
 | `rule.absolute-without-exception` | `${CLAUDE_PLUGIN_ROOT}/principles/ownership-map.md` |
 | `tooling.enforceable-rule-in-doc` | `${CLAUDE_PLUGIN_ROOT}/principles/tooling-over-docs.md` |
+| `architecture.boundary-convention-unenforced` | `${CLAUDE_PLUGIN_ROOT}/principles/boundary-convention.md` |
 | `instruction.duplicates-model-default` | `${CLAUDE_PLUGIN_ROOT}/skills/harness-audit/references/judgement-calls.md` |
 | `review.cutoff-instruction` | `${CLAUDE_PLUGIN_ROOT}/skills/harness-audit/references/judgement-calls.md` |
 
@@ -150,11 +151,17 @@ bootstrap이 레포의 몫으로 선언한 파일이다.
 | `rule.absolute-without-exception` | 예외가 붙지 않은 절대 규칙이 있을 때 |
 | `tooling.enforceable-rule-in-doc` | 도구가 소유할 수 있는 규칙이 문서에 남아 있을 때 |
 | `skill.without-repo-specific-content` | 스킬에 이 레포 고유의 것이 없을 때 |
+| `architecture.boundary-convention-unenforced` | 경계 규약이 있는지, 무엇이 그것을 강제하는지 읽어서 갈리지 않을 때 |
 | `instruction.duplicates-model-default` | 기본값이 반대인 축에 지시가 비어 있을 때 |
 | `review.cutoff-instruction` | 리뷰 보고를 잘라내라는 줄이 있을 때 |
 
 뒤의 둘은 `axis: calibrated`에 `on_unset: drop`이다. 캘리브레이션이 그 값을 모르면 규칙
-자체가 떨어지므로 질문도 뜨지 않는다. 정적으로는 여섯이고 한 번 도는 데 뜨는 것은 넷일 수 있다.
+자체가 떨어지므로 질문도 뜨지 않는다. 정적으로는 일곱이고 한 번 도는 데 뜨는 것은 다섯일 수 있다.
+
+`architecture.boundary-convention-unenforced`의 답은 **받아 적지 않는다.** 아래 「답을 받으면」이
+소유하는 것은 산문이고, 경계 규약은 산문이 아니라 설정이 소유한다. 감사는 상태를 보고하고
+어느 도구가 판정할 수 있는지 말하는 데서 멈춘다 — 설정을 쓰는 것은 부트스트랩이다. 여기서
+쓰면 아키텍처가 다시 묻지 않고 심는 답이 된다.
 
 ## 답을 받으면
 

@@ -108,6 +108,18 @@
       "source": "repo constitution: put it in the tool"
     },
     {
+      "id": "architecture.boundary-convention-unenforced",
+      "axis": "principle",
+      "decidable": "judgement",
+      "severity": "warn",
+      "rubric": "principles/boundary-convention.md",
+      "audit": {
+        "check": "agent-reads-boundary-enforcement",
+        "asks": "이 레포에 레이어 경계 규약이 있는가? 무엇이 그것을 강제하는가?"
+      },
+      "source": "repo constitution: architecture is a slot"
+    },
+    {
       "id": "instruction.duplicates-model-default",
       "axis": "calibrated",
       "calibrated_by": "model_defaults",

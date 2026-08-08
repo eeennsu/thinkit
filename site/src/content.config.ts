@@ -9,7 +9,7 @@ export const collections = {
     // 건드리지 못한다 — 12로 고치면 repo 문서 하나가 사라져도 랜딩이 자리를 메워 통과한다.
     // REPO_ROOTS의 exclude로 빠진 것은 세지 않는다. 그래서 exclude에 오타를 내면 개수가
     // 맞지 않아 여기서 세운다.
-    loader: repoDocs({ expectedRepoDocs: 10, localDir: "src/content/docs" }),
+    loader: repoDocs({ expectedRepoDocs: 11, localDir: "src/content/docs" }),
     schema: docsSchema(),
   }),
   // Starlight의 ko 번역에는 pagefind.* 키가 없다. 그러면 검색 결과 문구가 Pagefind 기본값,

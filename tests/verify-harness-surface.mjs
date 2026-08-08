@@ -344,12 +344,12 @@ function checkA3(skillMd) {
 function checkA5(rulesJson, principlesFiles, testsFiles, readme) {
   const findings = [];
   findings.push({
-    ok: rulesJson.items.length === 14,
-    message: `A5: rules.json 항목 수 ${rulesJson.items.length}개 (기대 14개)`,
+    ok: rulesJson.items.length === 15,
+    message: `A5: rules.json 항목 수 ${rulesJson.items.length}개 (기대 15개)`,
   });
   findings.push({
-    ok: principlesFiles.length === 4,
-    message: `A5: principles/*.md ${principlesFiles.length}개 (기대 4개)`,
+    ok: principlesFiles.length === 5,
+    message: `A5: principles/*.md ${principlesFiles.length}개 (기대 5개)`,
   });
 
   const fences = [...readme.matchAll(/```[a-zA-Z]*\n([\s\S]*?)```/g)].map((m) => m[1]);
@@ -601,7 +601,7 @@ function runSelfTest() {
   // --- A5 ----------------------------------------------------------------
   const a5Fixture = (itemCount) => {
     const rulesJson = { items: Array.from({ length: itemCount }, (_, i) => ({ id: `rule.${i}` })) };
-    const principlesFiles = ["a.md", "b.md", "c.md", "d.md"];
+    const principlesFiles = ["a.md", "b.md", "c.md", "d.md", "e.md"];
     const testsFiles = ["verify-one.mjs", "verify-two.mjs"];
     const readme = [
       "# repo",
@@ -617,12 +617,12 @@ function runSelfTest() {
     return { rulesJson, principlesFiles, testsFiles, readme };
   };
   {
-    const f = a5Fixture(14);
+    const f = a5Fixture(15);
     run("A5 온전한 픽스처", "intact", checkA5(f.rulesJson, f.principlesFiles, f.testsFiles, f.readme));
   }
   {
-    const f = a5Fixture(13);
-    run("A5 항목 13개짜리 rules.json", "broken", checkA5(f.rulesJson, f.principlesFiles, f.testsFiles, f.readme));
+    const f = a5Fixture(14);
+    run("A5 항목 14개짜리 rules.json", "broken", checkA5(f.rulesJson, f.principlesFiles, f.testsFiles, f.readme));
   }
 
   // --- B -------------------------------------------------------------------

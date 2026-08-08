@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import { stripJsonc, parseJsonc } from "../scripts/lib/jsonc.mjs";
 import { shadowed } from "../scripts/lib/precedence.mjs";
 import { readAlias } from "../scripts/lib/alias.mjs";
+import { readEnforcement } from "../scripts/lib/enforced.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -492,6 +493,82 @@ console.log("devDependency 고정");
   } else {
     console.log("  skip  next는 자기 리졸버를 고정하지 않는다");
   }
+}
+
+// 경계 판정자 셋. `layer-direction`은 인터뷰 Q0이 읽으라고 이름을 대는 셋을 찾는데,
+// 셋 다 실제로 인식되는 것을 본 적이 없으면 그 주장은 주장일 뿐이다. 그래서 각 판정자가
+// `full`을 내놓는 것을 한 번씩 보고, **아무 판정자도 없는 레포가 조용하지 않은 것**도 본다.
+//
+// 마지막 두 경우가 이 블록의 요점이다. eslint 설정을 읽고 셋 다 없으면 `none`이고, 읽을
+// 설정 자체가 없으면 `unknown`이다. 둘을 합치면 "우리가 고른 플러그인을 안 쓴다"가
+// "경계가 없다"로 보고되고, 그것을 근거로 산문을 지우면 규칙은 옮겨간 것이 아니라
+// 사라진 것이다.
+console.log("경계 판정자");
+{
+  const fixture = (files) => {
+    rmSync(tmp, { recursive: true, force: true });
+    mkdirSync(tmp, { recursive: true });
+    for (const [p, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(tmp, p)), { recursive: true });
+      writeFileSync(join(tmp, p), typeof content === "string" ? content : JSON.stringify(content, null, 2) + "\n");
+    }
+    return readEnforcement(tmp).checks["layer-direction"];
+  };
+  const pkg = (deps, scripts = {}) => ({ name: "x", devDependencies: deps, scripts });
+
+  let c = fixture({
+    "package.json": pkg({ "eslint-plugin-boundaries": "^7" }),
+    "eslint.config.mjs": "import boundaries from 'eslint-plugin-boundaries';\nexport default [{ rules: { 'boundaries/element-types': 'error' } }];\n",
+  });
+  ok("eslint-plugin-boundaries: 설치되고 참조되면 full", c.state === "full", JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({ "eslint-plugin-boundaries": "^7" }),
+    "eslint.config.mjs": "export default [{ rules: {} }];\n",
+  });
+  ok("eslint-plugin-boundaries: 설치만 되면 full이 아니고, 왜인지 말한다",
+    c.state !== "full" && /설치만/.test(c.why ?? ""), JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({ "eslint-plugin-import": "^2" }),
+    "eslint.config.mjs": "export default [{ rules: { 'import/no-restricted-paths': ['error', { zones: [] }] } }];\n",
+  });
+  ok("import/no-restricted-paths: 스코프 없으면 full", c.state === "full", JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({ "eslint-plugin-import": "^2" }),
+    "eslint.config.mjs": "export default [{ files: ['src/widgets/**'], rules: { 'import/no-restricted-paths': ['error', { zones: [] }] } }];\n",
+  });
+  ok("import/no-restricted-paths: 스코프가 붙으면 partial", c.state === "partial", JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({}),
+    "eslint.config.mjs": "export default [{ rules: { 'import/no-restricted-paths': ['error', { zones: [] }] } }];\n",
+  });
+  ok("import/no-restricted-paths: 플러그인이 없으면 판정자로 세지 않는다",
+    c.state !== "full" && c.state !== "partial" && /설치되어 있지 않다/.test(c.why ?? ""), JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({ "dependency-cruiser": "^16" }, { boundaries: "depcruise src" }),
+    ".dependency-cruiser.js": "module.exports = { forbidden: [] };\n",
+  });
+  ok("dependency-cruiser: 설정이 있고 명령이 부르면 full", c.state === "full", JSON.stringify(c));
+
+  c = fixture({
+    "package.json": pkg({ "dependency-cruiser": "^16" }),
+    ".dependency-cruiser.js": "module.exports = { forbidden: [] };\n",
+  });
+  ok("dependency-cruiser: 부르는 명령이 없으면 full이 아니고, 왜인지 말한다",
+    c.state !== "full" && /부르지 않는다/.test(c.why ?? ""), JSON.stringify(c));
+
+  c = fixture({ "package.json": pkg({}), "eslint.config.mjs": "export default [{ rules: {} }];\n" });
+  ok("설정을 읽었는데 셋 다 없으면 none이고, 셋을 다 열거한다",
+    c.state === "none" &&
+      ["eslint-plugin-boundaries", "import/no-restricted-paths", "dependency-cruiser"].every((n) => c.why.includes(n)),
+    JSON.stringify(c));
+
+  c = fixture({ "package.json": pkg({}) });
+  ok("읽을 설정이 아예 없으면 none이 아니라 unknown", c.state === "unknown", JSON.stringify(c));
 }
 
 if (!keep && existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });

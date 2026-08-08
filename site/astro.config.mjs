@@ -106,6 +106,7 @@ addEventListener("DOMContentLoaded", () => {
             { slug: "docs/principles/tooling-over-docs" },
             { slug: "docs/principles/ownership-map" },
             { slug: "docs/principles/safety-boundaries" },
+            { slug: "docs/principles/boundary-convention" },
           ],
         },
         // 설계 기록과 캘리브레이션 메모는 여기 없다. 사이드바에서만 빼면 내비게이션 없는
