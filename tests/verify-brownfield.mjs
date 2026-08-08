@@ -571,6 +571,72 @@ console.log("경계 판정자");
   ok("읽을 설정이 아예 없으면 none이 아니라 unknown", c.state === "unknown", JSON.stringify(c));
 }
 
+// 심어진 파일 상태와 종료 코드. 경계 설정이 통째로 사라진 레포가 exit 0을 받고 있었다 —
+// 강제되던 규칙이 사라진 것을 통과로 보고한 것이고, 이 플러그인이 남의 레포에서 지적하는
+// 실패와 같은 모양이다.
+//
+// 여기 픽스처가 셋인 이유는 셋이 **서로 다른 답**을 받아야 하기 때문이다. 하나만 두면
+// "전부 실패시키는 검사"와 구별되지 않는다.
+console.log("심어진 파일과 종료 코드");
+{
+  const answers = join(tmp, "answers.json");
+  const scaffold = () => {
+    rmSync(tmp, { recursive: true, force: true });
+    mkdirSync(join(tmp, "src"), { recursive: true });
+    writeFileSync(answers, JSON.stringify({
+      architecture: "fsd", projectName: "t", oneLine: "t",
+      severity: "error", greenfield: true, publicApi: "enforced", sliceCoupling: "isolated",
+    }));
+    execFileSync(process.execPath,
+      [join(root, "scripts/scaffold.mjs"), "react", "--target", tmp, "--answers", answers, "--json"],
+      { encoding: "utf8" });
+  };
+  // 종료 코드가 시험 대상이므로 throw를 잡아서 코드를 읽는다.
+  const check = (extra = []) => {
+    try {
+      const out = execFileSync(process.execPath,
+        [join(root, "scripts/check.mjs"), "--mode", "full", "--target", tmp, "--json", ...extra],
+        { encoding: "utf8" });
+      return { code: 0, json: JSON.parse(out) };
+    } catch (e) {
+      return { code: e.status, json: JSON.parse(e.stdout) };
+    }
+  };
+  const stateOf = (r, path) => r.json.planted?.find((p) => p.path === path)?.state;
+
+  scaffold();
+  let r = check();
+  ok("갓 bootstrap된 레포는 통과한다", r.code === 0, `exit ${r.code}`);
+
+  scaffold();
+  writeFileSync(join(tmp, "eslint.config.boundaries.mjs"), "// 레포가 고쳤다\n");
+  r = check();
+  ok("손편집은 edited-locally로 보고된다",
+    stateOf(r, "eslint.config.boundaries.mjs") === "edited-locally", JSON.stringify(r.json.planted));
+  ok("손편집은 실패가 아니다 — 레포의 답이다", r.code === 0, `exit ${r.code}`);
+
+  scaffold();
+  rmSync(join(tmp, "eslint.config.boundaries.mjs"));
+  r = check();
+  ok("삭제는 missing으로 보고된다", stateOf(r, "eslint.config.boundaries.mjs") === "missing");
+  ok("삭제는 실패다", r.code === 1, `exit ${r.code}`);
+
+  // --fix가 되살릴 수 있는 것은 `plantedFiles()`가 정본을 지니는 둘뿐이다. 스택과 답에서
+  // 생성되는 파일은 여기서 만들 수 없고, 조용히 넘기면 매니페스트만 최신으로 찍혀서
+  // 다음 실행이 `outdated`조차 내놓지 못한다.
+  r = check(["--fix"]);
+  ok("--fix는 되살릴 수 없다고 말한다",
+    r.json.notes.some((n) => /되살릴 수 없다/.test(n)), JSON.stringify(r.json.notes));
+  ok("--fix 뒤에도 여전히 실패다", r.code === 1, `exit ${r.code}`);
+
+  scaffold();
+  rmSync(join(tmp, ".claude/harness/check.mjs"));
+  r = check(["--fix"]);
+  ok("--fix는 심어진 체커는 되살린다",
+    r.json.fixed.some((f) => /harness\/check\.mjs/.test(f)), JSON.stringify(r.json.fixed));
+  ok("되살린 뒤에는 통과한다", r.code === 0, `exit ${r.code}`);
+}
+
 if (!keep && existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
 console.log(failed ? `\n${failed}건 실패` : "\n전부 통과");
 process.exit(failed ? 1 : 0);

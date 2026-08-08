@@ -264,8 +264,7 @@ function plantedState() {
     const p = join(target, f.path);
     if (!existsSync(p)) return { path: f.path, state: "missing" };
     const now = sha(p);
-    const isLocallyEdited = now !== f.sha256;
-    if (isLocallyEdited && !f.regenerated) return { path: f.path, state: "edited-locally", advice: "손으로 병합한다. 덮어쓰지 않는다" };
+    if (now !== f.sha256) return { path: f.path, state: "edited-locally", advice: "손으로 병합한다. 덮어쓰지 않는다" };
     if (canonicalVersion === null)
       return { path: f.path, state: "current", advice: "심긴 뒤로 바뀌지 않았다. 플러그인이 앞서 나갔는지는 여기서 확인할 수 없다" };
     if (manifest.version !== canonicalVersion) return { path: f.path, state: "outdated", advice: "다시 생성한다" };
@@ -369,24 +368,53 @@ if (fix) {
     const plant = plantedFiles(pluginRoot);
     const manifestPath = join(target, ".claude/harness/manifest.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    // 심어진 파일 목록은 매니페스트가 기록한 것보다 좁다. 매니페스트에는 scaffold가 쓴
+    // 것이 전부 오르지만 `plantedFiles()`가 정본 내용을 지니는 것은 체커와 규칙 집합
+    // 둘뿐이고, 나머지 — 린트 설정, tsconfig, 산문 — 는 스택과 답에서 생성된다.
+    // 그것들을 여기서 되살릴 방법은 없다.
+    const unfixable = [];
     for (const p of stale) {
       const canonical = plant.files.find((f) => f.path === p.path);
-      if (!canonical) continue;
+      if (!canonical) {
+        unfixable.push(`${p.path} (${p.state})`);
+        continue;
+      }
       write(p.path, canonical.content);
       const entry = manifest.files.find((f) => f.path === p.path);
       entry.sha256 = sha(Buffer.from(canonical.content, "utf8"));
       fixed.push(`${p.path}: 플러그인에서 갱신했다 (이전 상태 ${p.state})`);
     }
-    manifest.version = plant.version;
-    write(".claude/harness/manifest.json", JSON.stringify(manifest, null, 2) + "\n");
-    planted = plantedState();
+    // 하나도 못 고쳤는데 버전을 찍으면 매니페스트가 최신이라고 말하고, 다음 실행은
+    // 아직 없는 파일에 대해 `outdated`조차 내놓지 않는다. 실제로 쓴 것이 있을 때만 찍는다.
+    if (fixed.length) {
+      manifest.version = plant.version;
+      write(".claude/harness/manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+      planted = plantedState();
+    }
+    if (unfixable.length)
+      notes.push(`이 스크립트가 되살릴 수 없다 - 스택과 답에서 생성되는 파일이다. bootstrap을 다시 돌린다: ${unfixable.join(", ")}`);
   } else if (stale.length) {
     notes.push(`심어진 파일 ${stale.length}개가 낡았다. 이것은 심어진 사본이라 정본 내용을 지니지 않는다 - 플러그인에서 bootstrap을 다시 돌린다.`);
   }
 }
 
 findings.sort((a, b) => SEV[a.severity] - SEV[b.severity]);
-const failed = findings.some((f) => f.severity === "error" && !f.pending && !f.dropped);
+
+// 심어진 파일 상태 중 종료 코드에 들어가는 것 둘. 발견 목록이 아니라 여기 있는 이유는
+// 이것이 규칙 판정이 아니라 하네스 자신이 온전한지의 문제이기 때문이다.
+//
+//   missing      심었다고 기록된 파일이 없다. 경계 설정이 통째로 사라진 레포가 이 상태로
+//                exit 0을 받고 있었다 - 강제되던 규칙이 사라진 것을 통과로 보고했다.
+//   unreadable   매니페스트를 읽지 못했다. 감사가 이 축에 대해 아무것도 답하지 못한
+//                것이고, 돌지 않은 검사는 통과한 검사처럼 보이면 안 된다.
+//
+// `edited-locally`는 들어가지 않는다. 레포가 편집한 설정은 이제 레포의 답이고, 답을
+// 가진 레포를 실패로 세우면 이 플러그인은 자기 출력을 강요하는 도구가 된다. 보고는
+// 하지만 실패는 아니다. `outdated`도 아니다 - 플러그인이 앞서 나간 것은 레포의 결함이
+// 아니고, 처치는 재생성이다.
+const PLANTED_FAILS = new Set(["missing", "unreadable"]);
+const plantedFailed = (planted ?? []).filter((p) => PLANTED_FAILS.has(p.state));
+const failed = findings.some((f) => f.severity === "error" && !f.pending && !f.dropped) || plantedFailed.length > 0;
 
 if (json) {
   console.log(
@@ -403,6 +431,10 @@ if (json) {
   for (const f of fixed) console.log(`[fixed] ${f}`);
   for (const n of notes) console.log(`[note] ${n}`);
   console.log(`\n발견 ${findings.length}건 (판단이 필요한 것 ${findings.filter((f) => f.pending).length}건).`);
+  // 발견이 0건인데 종료 코드가 1인 실행이 있다. 이유를 적지 않으면 읽는 사람이 통과한
+  // 실행과 구별할 수 있는 것은 `echo $?`뿐이다.
+  if (plantedFailed.length)
+    console.log(`심어진 파일 ${plantedFailed.length}건이 실패다: ${plantedFailed.map((p) => `${p.path} (${p.state})`).join(", ")}`);
   if (fix) console.log(`${fixed.length}건 수리. 위 발견은 수리가 돌기 전에 측정한 것이고, 심어진 상태는 현재 값이다.`);
 }
 process.exit(failed ? 1 : 0);
