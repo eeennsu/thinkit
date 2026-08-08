@@ -41,10 +41,15 @@ const keep = args.includes("--keep");
 // 경우를 0으로 붙들지 않으면 보이지 않는다.
 const CASES = [
   {
-    name: "남겨진 console",
+    // 대조군이지 발견이 아니다. 예전에는 `no-console`을 기대했고, 그 규칙은
+    // "디버그 출력은 그것을 더한 이유보다 오래 산다"로 정당화됐다 — 취향의 정직한
+    // 서술이지 버그의 서술이 아니다. 이 하네스는 코드 취향을 소유하지 않으므로 규칙이
+    // 빠졌고, 이 픽스처는 그것이 실제로 빠졌는지를 붙든다. 누군가 다시 넣으면 여기서
+    // 잡힌다.
+    name: "남겨진 console: 취향이라 지적하지 않는다",
     file: "src/shared/console-left-behind.ts",
     body: "export function report(value: string) {\n  console.log(value);\n}\n",
-    expect: ["no-console"],
+    expect: [],
   },
   {
     name: "리팩터링 후 안 쓰이게 된 인자",
@@ -119,6 +124,59 @@ for (const c of CASES) {
   }
   console.log(`FAIL ${c.name}: 기대 [${want.join(", ")}], 받은 값 [${got.join(", ")}]`);
   failed = true;
+}
+
+// --- 경계를 강제하지 않는 모듈도 실제로 로드되는 설정을 낸다 ------------------
+//
+// 진입 설정이 없는 파일을 import하거나 빈 자리에 문법 오류를 남기면, 그 레포는 첫 린트
+// 명령에서 죽는다. 그것은 위반 0건과 똑같이 보인다 — eslint가 아무 파일도 보고하지
+// 않기 때문이다. 그래서 여기서 확인하는 것은 "위반이 없다"가 아니라 "린트가 돌았다"이고,
+// 레이어 방향을 어기는 파일이 그 안에 함께 들어간다. fsd였으면 보고됐을 파일이다.
+{
+  const noneTarget = join(sandbox, `verify-rules-${stack}-none`);
+  rmSync(noneTarget, { recursive: true, force: true });
+  mkdirSync(noneTarget, { recursive: true });
+  const answers = join(noneTarget, "answers.json");
+  writeFileSync(answers, JSON.stringify({ architecture: "none" }));
+  execFileSync(
+    process.execPath,
+    [join(root, "scripts/scaffold.mjs"), stack, "--target", noneTarget, "--answers", answers],
+    { stdio: "ignore" }
+  );
+
+  const upward = "src/entities/user/model.ts";
+  mkdirSync(dirname(join(noneTarget, upward)), { recursive: true });
+  writeFileSync(
+    join(noneTarget, upward),
+    "import { thing } from '@/features/cart';\n\nexport const user = thing;\n"
+  );
+
+  let raw = "";
+  try {
+    raw = execFileSync("npx", ["eslint", "src", "-f", "json"], { cwd: noneTarget, encoding: "utf8", shell: true });
+  } catch (e) {
+    raw = e.stdout ?? "";
+  }
+  let parsed = [];
+  let parseFailed = false;
+  try { parsed = JSON.parse(raw || "[]"); } catch { parseFailed = true; }
+
+  const linted = parsed.find((x) => norm(x.filePath).includes(upward));
+  if (parseFailed || !linted) {
+    console.log("FAIL architecture=none: eslint가 파일을 린트하지 못했다 (설정이 로드되지 않았다)");
+    failed = true;
+  } else {
+    const boundaryRules = linted.messages.map((m) => m.ruleId ?? "").filter((id) => id.startsWith("boundaries/"));
+    if (boundaryRules.length) {
+      console.log(`FAIL architecture=none: 경계 규칙이 걸렸다 [${[...new Set(boundaryRules)].join(", ")}]`);
+      failed = true;
+    } else {
+      console.log("ok   architecture=none: 설정이 로드되고, 레이어를 거슬러 올라가는 import는 보고되지 않는다");
+    }
+  }
+
+  if (failed || keep) console.log(`\n경계 없는 픽스처를 남겨 둠:\n  ${noneTarget}`);
+  else rmSync(noneTarget, { recursive: true, force: true });
 }
 
 if (failed || keep) console.log(`\n픽스처를 남겨 둠:\n  ${target}`);
