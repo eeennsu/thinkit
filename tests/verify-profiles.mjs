@@ -10,6 +10,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadProfile, listStacks, questionsPath } from "../scripts/lib/profile.mjs";
+import { loadModule, listModules } from "../scripts/lib/module.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -31,9 +32,11 @@ if (!stacks.length) bad("listStacks()가 아무것도 반환하지 않았다");
 // typescript는 어떤 설정도 직접 import하지 않지만 목록에 있다. typescript-eslint의
 // 파서가 그것을 요구하고, scaffold가 그것을 읽을 컴파일러가 있다고 전제하는
 // tsconfig.json을 쓴다.
+// eslint-plugin-boundaries는 여기 없다. 경계를 강제하는 아키텍처 모듈만 그것을 요구하고,
+// 그래서 그 모듈이 선언한다. 프로필에 남겨 두면 "경계 규약 없음"이라 답한 레포가
+// 아무것도 로드하지 않을 플러그인을 설치하라는 말을 듣는다.
 const REQUIRED_DEPS = [
   "eslint",
-  "eslint-plugin-boundaries",
   "typescript-eslint",
   "typescript",
   "eslint-plugin-react-hooks",
@@ -52,7 +55,31 @@ for (const stack of stacks) {
   // 프로필도 설치는 된다. 그래도 하나는 지목해야 한다.
   if (!profile.resolver?.devDependency) bad(`${stack}: resolver.devDependency가 설정되지 않았다`);
 
-  if (!profile.fsdRoot) bad(`${stack}: fsdRoot가 설정되지 않았다`);
+  if (!profile.sourceRoot) bad(`${stack}: sourceRoot가 설정되지 않았다`);
+
+  // 프로필이 지목하는 모듈은 인터뷰가 확인받으러 들고 가는 제안이다. 없는 모듈을
+  // 지목하면 그 스택은 첫 실행에서 죽는다 — questions 오버레이가 같은 검사를 받는
+  // 이유와 같고, 이쪽은 그것 없이 출고되면 스택 전체가 못 쓰는 것이 된다.
+  if (!profile.architecture) bad(`${stack}: architecture가 설정되지 않았다`);
+  else {
+    try {
+      const mod = loadModule(root, profile.architecture);
+      // 경계를 강제하는 모듈을 지목한 스택은 그 설정을 받을 자리와, 그것을 읽을
+      // 리졸버를 가지고 있어야 한다. 셋 중 하나만 빠져도 생성된 정책은 조용히
+      // 아무것도 강제하지 않는다.
+      if (mod.boundaries) {
+        const writesBoundaries = (profile.files ?? []).some((f) => f.requires === "boundaries");
+        if (!writesBoundaries)
+          bad(`${stack}: 경계 모듈 "${mod.name}"을(를) 지목하는데 files[]에 requires:"boundaries" 산출물이 없다`);
+        const resolverDep = profile.resolver?.devDependency;
+        if (resolverDep && !(resolverDep in (profile.boundaryDevDependencies ?? {})))
+          bad(`${stack}: 리졸버 ${resolverDep}가 boundaryDevDependencies에 고정되지 않았다`);
+      }
+      ok(`${stack}: 아키텍처 모듈 "${mod.name}" 해석됨 (boundaries=${mod.boundaries})`);
+    } catch (e) {
+      bad(`${stack}: ${e.message}`);
+    }
+  }
 
   const templates = profile.files ?? [];
   if (!templates.length) bad(`${stack}: files[]가 비어서 실행해도 설정을 쓰지 않는다`);
@@ -65,6 +92,31 @@ for (const stack of stacks) {
   // 이 규칙에 걸린다.
   const writesBabel = templates.some((f) => f.dest === "babel.config.js");
   if (writesBabel && !profile.babelPreset) bad(`${stack}: babel.config.js를 쓰면서 babelPreset을 선언하지 않았다`);
+}
+
+// 모듈은 슬롯이므로 디스크에 있는 것이 전부 로드돼야 한다. 어떤 프로필도 지목하지 않는
+// 모듈은 고아가 아니다 — `none`이 그렇고, 그것은 기본값이 아니라 답이기 때문이다.
+// 검사하는 것은 각 모듈이 자기 선언을 지키는가다.
+{
+  const modules = listModules(root);
+  if (!modules.length) bad("modules/ 아래에 아키텍처 모듈이 없다");
+  for (const name of modules) {
+    try {
+      const mod = loadModule(root, name);
+      // 강제한다고 선언한 모듈은 그 강제를 돌릴 패키지도 선언해야 한다. 이것이 없으면
+      // 생성된 설정이 대상 레포의 린트 시점에 MODULE_NOT_FOUND로 죽는다.
+      if (mod.boundaries && !Object.keys(mod.devDependencies).length)
+        bad(`모듈 ${name}: boundaries: true인데 devDependencies가 비어 있다`);
+      ok(`모듈 ${name}: 해석됨 (boundaries=${mod.boundaries})`);
+    } catch (e) {
+      bad(`모듈 ${name}: ${e.message}`);
+    }
+  }
+  // 경계를 강제하지 않는 답이 하나도 없으면 슬롯은 슬롯이 아니다. 아키텍처는 다시
+  // 묻지 않고 심어지는 유일한 답이 되고, 그것이 이 슬롯이 생긴 이유 전부다.
+  const optOut = modules.filter((n) => !loadModule(root, n).boundaries);
+  if (!optOut.length) bad("경계를 강제하지 않는 모듈이 하나도 없다: 아키텍처가 답이 아니라 기본값으로 돌아간다");
+  else ok(`경계를 강제하지 않는 답이 있다: ${optOut.join(", ")}`);
 }
 
 // 오버레이 배선을 양쪽 끝에서 본다. 한 방향은 이름이 바뀐 파일을 가리키는 프로필을

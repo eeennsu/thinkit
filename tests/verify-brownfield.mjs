@@ -283,11 +283,11 @@ console.log("레이어가 아닌 디렉터리");
   const manifest = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
   const config = readFileSync(join(tmp, "eslint.config.boundaries.mjs"), "utf8");
 
-  ok("레이어가 아닌 디렉터리가 탐지된다", manifest.fsd.extraRoots.includes("db"), JSON.stringify(manifest.fsd.extraRoots));
-  ok("레이어 디렉터리는 아니다", !manifest.fsd.extraRoots.includes("features"));
-  ok("fsdRoot 안의 routingRoot도 아니다", !manifest.fsd.extraRoots.includes("app"),
+  ok("레이어가 아닌 디렉터리가 탐지된다", manifest.architecture.extraRoots.includes("db"), JSON.stringify(manifest.architecture.extraRoots));
+  ok("레이어 디렉터리는 아니다", !manifest.architecture.extraRoots.includes("features"));
+  ok("sourceRoot 안의 routingRoot도 아니다", !manifest.architecture.extraRoots.includes("app"),
     "app이 레이어보다 먼저 등록된 라우팅 요소를 가리게 된다");
-  ok("점으로 시작하는 디렉터리도 아니다", !manifest.fsd.extraRoots.includes(".cache"));
+  ok("점으로 시작하는 디렉터리도 아니다", !manifest.architecture.extraRoots.includes(".cache"));
   ok("그것을 위한 요소가 등록된다", /"type": "db"[\s\S]{0,60}"pattern": "src\/db"/.test(config));
   ok("배치가 드러난다", summary.notes.some((n) => /레이어가 아니다/.test(n)), JSON.stringify(summary.notes));
 
@@ -301,7 +301,7 @@ console.log("레이어가 아닌 디렉터리");
   execFileSync(process.execPath,
     [join(root, "scripts/scaffold.mjs"), "next", "--target", tmp, "--answers", answers], { encoding: "utf8" });
   const off = JSON.parse(readFileSync(join(tmp, ".claude/harness/manifest.json"), "utf8"));
-  ok("명시적인 빈 답변이 탐지를 끈다", off.fsd.extraRoots.length === 0);
+  ok("명시적인 빈 답변이 탐지를 끈다", off.architecture.extraRoots.length === 0);
 
   // 이미 레이어인 이름은 그것을 위한 두 번째 요소를 등록하게 된다.
   writeFileSync(answers, JSON.stringify({ extraRoots: ["shared"] }));

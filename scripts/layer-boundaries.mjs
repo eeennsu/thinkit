@@ -1,4 +1,8 @@
-// layers.json -> eslint-plugin-boundaries settings + policies.
+// 레이어 그래프 -> eslint-plugin-boundaries settings + policies.
+//
+// 그래프는 아키텍처 모듈이 소유한다(`modules/<name>/layers.json`). 이 파일은 그것을
+// 읽을 뿐 어느 그래프인지는 모른다 — FSD도 그중 하나다. 모듈이 경계를 강제하지 않으면
+// (`graph === null`) 여기서 만들어지는 것은 없고, 그것은 실패가 아니라 답이다.
 //
 // eslint-plugin-boundaries 7.1.0에 대고 확인함:
 //   - 정식 옵션 키는 `policies`다 (`rules`는 폐기된 별칭)
@@ -23,17 +27,29 @@ const DEFAULTS = { publicApi: "enforced", sliceCoupling: "isolated" };
 
 // 답변 -> 빌더가 받는 옵션 객체. 모르는 값은 기본값으로 떨어지는 대신 throw한다.
 // 조용히 엄격한 설정을 만들어내는 오타는 레포의 답으로 보고되기 때문이다.
-export function resolveOptions(fsd, profile, answers = {}) {
-  const spec = fsd.variants ?? {};
-  const opts = { ...DEFAULTS };
+export function resolveOptions(graph, profile, answers = {}) {
+  const spec = graph?.variants ?? {};
+  // 그래프가 없으면 변형 키 자체를 두지 않는다. 기본값을 담아 두면 그것이 매니페스트에
+  // 기록되고, 다음 실행이 그 기록을 답변으로 되읽어서 "이 모듈에는 뜻이 없는 답"이라며
+  // 자기가 쓴 값에 대고 멈춘다.
+  const opts = graph ? { ...DEFAULTS } : {};
   for (const name of Object.keys(DEFAULTS)) {
+    const given = answers[name];
+    const answered = !(given === undefined || given === null || given === "");
+    // 경계를 강제하지 않는 모듈에는 조일 것이 없다. 그런 답을 조용히 버리면 레포는
+    // publicApi를 답했는데 아무것도 그것을 강제하지 않는 하네스를 받고, 보고서는
+    // 0을 출력하면서 이유를 대지 않는다.
+    if (!graph) {
+      if (answered)
+        throw new Error(`${name}은(는) 레이어 그래프를 가진 아키텍처 모듈에서만 뜻이 있다: "${given}". 지금 모듈은 경계를 강제하지 않는다.`);
+      continue;
+    }
     const def = spec[name];
     if (!def) continue;
     opts[name] = def.default ?? DEFAULTS[name];
-    const given = answers[name];
-    if (given === undefined || given === null || given === "") continue;
+    if (!answered) continue;
     if (!def.values.includes(given))
-      throw new Error(`모르는 ${name}: "${given}". layers.json이 허용하는 값: ${def.values.join(", ")}`);
+      throw new Error(`모르는 ${name}: "${given}". 레이어 그래프가 허용하는 값: ${def.values.join(", ")}`);
     opts[name] = given;
   }
 
@@ -61,18 +77,28 @@ export function resolveOptions(fsd, profile, answers = {}) {
   }
   opts.routingRoot = routingRoot;
 
-  const names = fsd.layers.map((l) => l.name);
-  const routingImports = answers.routingImports ?? fsd.routing.mayImport;
-  // 여기서 흔한 실수는 문자열이다 (["app"] 대신 "app"). 이것이 없으면 filter 안에서
-  // TypeError로 실패한다 — 답변 형태 오류에 우리 코드를 가리키는 스택 트레이스를 준다.
-  if (!Array.isArray(routingImports))
-    throw new Error(`routingImports는 레이어 이름의 배열이어야 한다, 받은 타입 ${typeof routingImports}. 레이어: ${names.join(", ")}`);
-  const unknown = routingImports.filter((n) => !names.includes(n));
-  if (unknown.length)
-    throw new Error(`routingImports가 없는 레이어를 지목한다: ${unknown.join(", ")}. 레이어: ${names.join(", ")}`);
-  opts.routingImports = routingImports;
+  const names = graph?.layers.map((l) => l.name) ?? [];
+  if (graph) {
+    const routingImports = answers.routingImports ?? graph.routing.mayImport;
+    // 여기서 흔한 실수는 문자열이다 (["app"] 대신 "app"). 이것이 없으면 filter 안에서
+    // TypeError로 실패한다 — 답변 형태 오류에 우리 코드를 가리키는 스택 트레이스를 준다.
+    if (!Array.isArray(routingImports))
+      throw new Error(`routingImports는 레이어 이름의 배열이어야 한다, 받은 타입 ${typeof routingImports}. 레이어: ${names.join(", ")}`);
+    const unknown = routingImports.filter((n) => !names.includes(n));
+    if (unknown.length)
+      throw new Error(`routingImports가 없는 레이어를 지목한다: ${unknown.join(", ")}. 레이어: ${names.join(", ")}`);
+    opts.routingImports = routingImports;
+  } else {
+    // 비어 있는 답은 답이 아니라 이 모듈에서 그 키가 가지는 유일한 값이다. 매니페스트가
+    // 그것을 기록하고 다음 실행이 되읽으므로, 여기서 거부하면 도구가 자기가 쓴 파일에
+    // 대고 멈춘다. 값이 담긴 답만 거부한다.
+    const given = answers.routingImports;
+    if (given !== undefined && given !== null && (!Array.isArray(given) || given.length))
+      throw new Error("routingImports는 레이어 그래프를 가진 아키텍처 모듈에서만 뜻이 있다. 지금 모듈은 경계를 강제하지 않는다.");
+    opts.routingImports = [];
+  }
 
-  // fsdRoot 아래에서 레이어가 아닌 디렉터리들. 하네스보다 먼저 있던 레포는 전부 몇 개씩
+  // sourceRoot 아래에서 레이어가 아닌 디렉터리들. 하네스보다 먼저 있던 레포는 전부 몇 개씩
   // 가지고 있고 — src/db, src/data, src/subjects — 그것들을 위한 요소가 등록되어 있지
   // 않으면 `boundaries/no-unknown-dependencies`가 그리로 닿는 모든 import에 걸린다.
   // --max-warnings 0으로 린트를 도는 레포에서 그것은 발견이 아니라 아무도 켤 수 없는
@@ -85,6 +111,8 @@ export function resolveOptions(fsd, profile, answers = {}) {
   const extraRoots = answers.extraRoots ?? [];
   if (!Array.isArray(extraRoots))
     throw new Error(`extraRoots는 디렉터리 이름의 배열이어야 한다, 받은 타입 ${typeof extraRoots}`);
+  if (!graph && extraRoots.length)
+    throw new Error("extraRoots는 레이어 그래프를 가진 아키텍처 모듈에서만 뜻이 있다. 지금 모듈은 경계를 강제하지 않는다.");
   const collides = extraRoots.filter((n) => names.includes(n));
   if (collides.length)
     throw new Error(`extraRoots가 이미 요소를 가진 레이어를 지목한다: ${collides.join(", ")}`);
@@ -93,16 +121,16 @@ export function resolveOptions(fsd, profile, answers = {}) {
   return opts;
 }
 
-export function buildElements(fsd, profile, opts = {}) {
+export function buildElements(graph, profile, opts = {}) {
   const o = { ...DEFAULTS, routingRoot: profile.routingRoot ?? null, ...opts };
-  const root = trimSlash(profile.fsdRoot);
+  const root = trimSlash(profile.sourceRoot);
   const elements = [];
-  // 일부러 먼저 등록한다. 아니면 fsdRoot 안의 routingRoot(src/navigators/)가 먼저
+  // 일부러 먼저 등록한다. 아니면 sourceRoot 안의 routingRoot(src/navigators/)가 먼저
   // 닿는 레이어 패턴에 삼켜진다.
   if (o.routingRoot) {
-    elements.push({ type: fsd.routing.type, pattern: trimSlash(o.routingRoot) });
+    elements.push({ type: graph.routing.type, pattern: trimSlash(o.routingRoot) });
   }
-  for (const layer of fsd.layers) {
+  for (const layer of graph.layers) {
     elements.push(
       layer.sliced
         ? { type: layer.name, pattern: `${root}/${layer.name}/*`, capture: ["slice"] }
@@ -117,21 +145,21 @@ export function buildElements(fsd, profile, opts = {}) {
   return elements;
 }
 
-export function buildPolicies(fsd, profile, opts = {}) {
+export function buildPolicies(graph, profile, opts = {}) {
   const o = {
     ...DEFAULTS,
     routingRoot: profile.routingRoot ?? null,
-    routingImports: fsd.routing.mayImport,
+    routingImports: graph.routing.mayImport,
     ...opts,
   };
-  const names = fsd.layers.map((l) => l.name);
+  const names = graph.layers.map((l) => l.name);
   const target = (name) => {
-    const layer = fsd.layers.find((l) => l.name === name);
+    const layer = graph.layers.find((l) => l.name === name);
     // 레이어별 플래그는 어떤 레이어가 애초에 public API를 가지는지 말하고, 변형은
     // 그것이 강제되는지 말한다. 둘 다 참이어야 한다. 그래야 "open"으로 답하는 것이
     // 그런 걸 가진 적 없는 레이어를 검사 대상 요소로 만들지 않는다.
     return layer.publicApiEnforced && o.publicApi === "enforced"
-      ? { element: { type: name, fileInternalPath: fsd.publicApi } }
+      ? { element: { type: name, fileInternalPath: graph.publicApi } }
       : { element: { type: name } };
   };
   const extras = o.extraRoots ?? [];
@@ -139,7 +167,7 @@ export function buildPolicies(fsd, profile, opts = {}) {
   const policies = [];
   if (o.routingRoot) {
     policies.push({
-      from: { element: { type: fsd.routing.type } },
+      from: { element: { type: graph.routing.type } },
       allow: { to: { element: { types: { anyOf: [...o.routingImports, ...extras] } } } },
     });
   }
@@ -147,7 +175,7 @@ export function buildPolicies(fsd, profile, opts = {}) {
     // 형제 슬라이스는 별개 요소라서 disallow 기본값이 이미 막는다. 허용하려면 명시적인
     // 자기 허용이 필요하다. 그것도 target()을 거친다. 아니면 "same-layer"가
     // "enforced"가 다른 모든 호출자에게 막는 깊은 import를 형제에게 조용히 건네준다.
-    if (o.sliceCoupling === "same-layer" && fsd.layers[i].sliced) {
+    if (o.sliceCoupling === "same-layer" && graph.layers[i].sliced) {
       policies.push({ from: { element: { type: name } }, allow: { to: target(name) } });
     }
     const below = names.slice(i + 1);
@@ -173,16 +201,17 @@ export function buildPolicies(fsd, profile, opts = {}) {
 
 // report.mjs가 보고하는 단위. 각 줄은 서로 다른 것을 센다. report.mjs를 보라.
 // 제약을 끄는 변형은 줄을 없애는 대신 0으로 센다. "0"은 레포가 그것을 답으로 치워버렸다는
-// 사실이다.
-export function counts(fsd, profile, opts = {}) {
+// 사실이다. 경계를 강제하지 않는 모듈도 마찬가지다 — 줄은 남고 값이 0이 된다.
+export function counts(graph, profile, opts = {}) {
+  if (!graph) return { layerDirection: 0, sliceIsolation: 0, publicApi: 0, routing: 0 };
   const o = { ...DEFAULTS, routingRoot: profile.routingRoot ?? null, ...opts };
-  const n = fsd.layers.length;
+  const n = graph.layers.length;
   const orderedPairs = n * (n - 1);
   const allowedPairs = (n * (n - 1)) / 2;
   return {
     layerDirection: orderedPairs - allowedPairs,
-    sliceIsolation: o.sliceCoupling === "isolated" ? fsd.layers.filter((l) => l.sliced).length : 0,
-    publicApi: o.publicApi === "enforced" ? fsd.layers.filter((l) => l.publicApiEnforced).length : 0,
+    sliceIsolation: o.sliceCoupling === "isolated" ? graph.layers.filter((l) => l.sliced).length : 0,
+    publicApi: o.publicApi === "enforced" ? graph.layers.filter((l) => l.publicApiEnforced).length : 0,
     routing: o.routingRoot ? 1 : 0,
   };
 }

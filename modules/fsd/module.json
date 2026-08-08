@@ -1,0 +1,11 @@
+{
+  "name": "fsd",
+  "summary": "Feature-Sliced Design. 레이어 방향, 슬라이스 격리, 슬라이스 public API를 eslint-plugin-boundaries로 강제한다.",
+  "boundaries": true,
+  "layers": "layers.json",
+  "rationale": "rationale.md",
+  "note": "이 모듈이 강제하는 것의 판정 기준과 강제하지 못하는 것은 rationale.md에 있다.",
+  "devDependencies": {
+    "eslint-plugin-boundaries": "^7"
+  }
+}

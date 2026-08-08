@@ -92,6 +92,60 @@ const read = (dir, rel) => readFileSync(join(dir, rel), "utf8");
   check(r.status !== 0, "publicApi 오타: 조용한 엄격 기본값이 아니라 0이 아닌 종료");
 }
 
+// --- 아키텍처 모듈은 슬롯이지 기본값이 아니다 --------------------------------
+// 이 블록이 증명하는 것 하나: 경계 규약이 없는 레포도 나머지 하네스를 받을 수 있다.
+// 그것이 되지 않는 동안 아키텍처는 이 플러그인이 유일하게 묻지 않고 심는 답이었다.
+{
+  const target = fresh("module-unknown");
+  write(target, "answers.json", JSON.stringify({ architecture: "fsdd" }));
+  const r = scaffold(target, ["--answers", join(target, "answers.json")]);
+  check(r.status === 2, "모르는 아키텍처 모듈: 프로필 기본값으로 떨어지는 대신 exit 2");
+  check(/있는 모듈/.test(r.stderr), "모르는 아키텍처 모듈: 메시지가 있는 모듈을 나열한다");
+  check(!existsSync(join(target, "CLAUDE.md")), "모르는 아키텍처 모듈: 아무것도 쓰이지 않음");
+}
+{
+  // 이름이 곧 경로다. routingRoot가 레포 바깥을 가리킬 수 있었던 것과 같은 부류이고,
+  // 여기서는 플러그인 바깥의 아무 디렉터리나 모듈로 읽히는 형태가 된다.
+  const target = fresh("module-escape");
+  write(target, "answers.json", JSON.stringify({ architecture: "../stacks/react" }));
+  const r = scaffold(target, ["--answers", join(target, "answers.json")]);
+  check(r.status === 2, "플러그인을 빠져나가는 모듈 이름: 거부");
+}
+{
+  const target = fresh("module-none");
+  write(target, "answers.json", JSON.stringify({ architecture: "none" }));
+  const r = scaffold(target, ["--answers", join(target, "answers.json")]);
+  check(r.status === 0, "architecture=none: exit 0");
+  check(!existsSync(join(target, "eslint.config.boundaries.mjs")), "architecture=none: 경계 설정을 쓰지 않는다");
+  // 진입 설정이 없는 파일을 import하면 그 레포는 첫 린트에서 죽는다. 경계 설정을
+  // 안 쓰는 것과 그것을 안 쓰는 진입 설정을 쓰는 것은 함께 가야 한다.
+  const entry = read(target, "eslint.config.mjs");
+  check(!/eslint\.config\.boundaries/.test(entry), "architecture=none: 진입 설정이 없는 파일을 import하지 않는다");
+  check(/react-hooks\/rules-of-hooks/.test(entry), "architecture=none: 나머지 린트 규칙은 그대로 나간다");
+  // 나머지 하네스가 전부 나가는 것이 이 답의 요점이다. 경계가 없다고 산문과 체커까지
+  // 빠지면 "경계 규약 없음"은 답이 아니라 플러그인을 못 쓰는 이유가 된다.
+  for (const f of ["CLAUDE.md", "AGENTS.md", "tsconfig.json", "prettier.config.mjs", ".claude/harness/check.mjs"])
+    check(existsSync(join(target, f)), `architecture=none: ${f}는 그대로 나간다`);
+  check(!existsSync(join(target, "src/entities")), "architecture=none: 있지도 않은 레이어 디렉터리를 만들지 않는다");
+  const pkg = JSON.parse(read(target, "package.json"));
+  check(!("eslint-plugin-boundaries" in pkg.devDependencies), "architecture=none: 아무것도 로드하지 않을 플러그인을 설치하라고 하지 않는다");
+  check("eslint" in pkg.devDependencies, "architecture=none: 린터 자체는 그대로 요구한다");
+
+  const rep = run("report.mjs", ["react", "--target", target], root);
+  check(rep.status === 0, "architecture=none: 보고서 exit 0");
+  check(/아키텍처 모듈\s+none/.test(rep.stdout), "보고서가 어느 모듈로 돌았는지 말한다");
+  // 표시 없는 0은 생성되지 못한 규칙으로 읽힌다. 여기서의 0은 답이다.
+  check(/레이어 방향\s+0\s+.*architecture=none/.test(rep.stdout), "0이 구멍이 아니라 답이라고 적힌다");
+}
+{
+  // 조일 것이 없는 모듈에 조임 답변이 도착하면, 그 답변은 갈 곳이 없다. 조용히 버리면
+  // 레포는 publicApi를 답했는데 아무것도 그것을 강제하지 않는 하네스를 받는다.
+  const target = fresh("module-none-variant");
+  write(target, "answers.json", JSON.stringify({ architecture: "none", publicApi: "enforced" }));
+  const r = scaffold(target, ["--answers", join(target, "answers.json")]);
+  check(r.status !== 0, "경계 없는 모듈에 publicApi 답변: 조용히 버리는 대신 0이 아닌 종료");
+}
+
 // --- 형태가 그 형태가 아닌 answers -------------------------------------------
 // 둘 다 파일을 손으로 쓰는 사람이 만들어내는 것이고, 둘 다 쓰인 자리에서 잡히지
 // 않았다. 첫 번째는 파일이 이미 디스크에 올라간 뒤 .map에서 죽었고, 두 번째는 출고됐다.

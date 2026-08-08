@@ -7,7 +7,8 @@ import { execFileSync } from "node:child_process";
 import { loadProfile, listStacks } from "./lib/profile.mjs";
 import { readAlias } from "./lib/alias.mjs";
 import { ownedUnchanged, plantedFiles } from "./lib/planted.mjs";
-import { counts, resolveOptions } from "./fsd-boundaries.mjs";
+import { loadModule } from "./lib/module.mjs";
+import { counts, resolveOptions } from "./layer-boundaries.mjs";
 import { groupDirs } from "./import-order.mjs";
 import { parseJsonc } from "./lib/jsonc.mjs";
 import { shadowed } from "./lib/precedence.mjs";
@@ -27,15 +28,22 @@ if (!stack || stack.startsWith("--")) {
 const target = resolve(opt("target", process.cwd()));
 
 const profile = loadProfile(root, stack);
-const fsd = JSON.parse(readFileSync(join(root, "modules/fsd/layers.json"), "utf8"));
 
 // 변형은 답변에서 왔으므로 scaffold가 기록한 것에서 되읽는다. 프로필에서 다시 계산하면
 // 다르게 답한 레포에 엄격한 개수를 보고하게 된다 — 설정은 이렇게 말하고 보고서는
 // 저렇게 말하는 상태.
+//
+// 아키텍처 모듈도 답변이라 같은 자리에서 읽는다. 프로필의 제안으로 되돌아가면
+// "경계 규약 없음"이라 답한 레포가 FSD 개수를 받는다.
 const manifestPath = join(target, ".claude/harness/manifest.json");
 const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : null;
-const fsdOpts = resolveOptions(fsd, profile, manifest?.fsd ?? {});
-const c = counts(fsd, profile, fsdOpts);
+// 모듈 슬롯 이전의 매니페스트는 `fsd` 키에 변형만 기록했다. 그때는 그것이 유일한
+// 답이었으므로 모듈 이름을 유도할 수 있다. 유도할 수 없는 것만 기본값으로 떨어진다.
+const recorded = manifest?.architecture ?? (manifest?.fsd ? { module: "fsd", ...manifest.fsd } : null);
+const architecture = loadModule(root, recorded?.module ?? profile.architecture);
+const graph = architecture.graph;
+const boundaryOpts = resolveOptions(graph, profile, recorded ?? {});
+const c = counts(graph, profile, boundaryOpts);
 const { alias, source: aliasSource } = await readAlias(target, profile, ownedUnchanged(target, manifest));
 const aliases = Object.keys(alias).length;
 
@@ -61,7 +69,7 @@ const strictFlags = tsconfig
 // 것만 기록한다.
 const owns = (rel) => Boolean(manifest?.files?.some((f) => f.path === rel));
 const prettier = owns("prettier.config.mjs") ? 1 : 0;
-const importGroups = prettier ? groupDirs(fsd, profile, fsdOpts).length : 0;
+const importGroups = prettier ? groupDirs(graph, profile, boundaryOpts).length : 0;
 
 // 소유는 "우리가 이 파일을 썼는가"에 답한다. "도구가 그것을 읽는가"에는 답하지 않는다.
 // 이미 eslint.config.js를 가진 레포에서 우리 것은 절대 로드되지 않는다 — 그러면 거기
@@ -107,8 +115,9 @@ const files = [
   ".claude/harness/manifest.json",
 ].filter((p) => existsSync(join(target, p)));
 
-const layerDirs = fsd.layers.filter((l) => existsSync(join(target, profile.fsdRoot.replace(/\/+$/, ""), l.name)));
-const missingLayers = fsd.layers.filter((l) => !layerDirs.includes(l)).map((l) => l.name);
+const layers = graph?.layers ?? [];
+const layerDirs = layers.filter((l) => existsSync(join(target, profile.sourceRoot.replace(/\/+$/, ""), l.name)));
+const missingLayers = layers.filter((l) => !layerDirs.includes(l)).map((l) => l.name);
 
 // 산문이 사는 파일을 잰다. CLAUDE.md가 `@AGENTS.md` 한 줄이면 그 파일은 3토큰이고,
 // 그 숫자를 하네스 크기로 출력하면 예산 줄이 항상 통과한다 — 재지 않은 것을 잰 것처럼
@@ -139,27 +148,46 @@ if (!existsSync(checkerPath)) {
 // 규칙으로 읽힌다.
 const answered = (on, off) => (on ? "" : `   <- ${off}`);
 
+// 경계를 강제하지 않는 모듈에서 이 네 줄은 전부 0이고, 그 0은 변형 답변이 만든 0과
+// 다른 것을 뜻한다. 한쪽은 "이 제약을 끄기로 답했다"이고 다른 쪽은 "이 레포의 경계는
+// 도구가 판정하지 않는다"이다. 같은 숫자에 같은 각주를 달면 둘이 구별되지 않는다.
+const noBoundaries = !architecture.boundaries;
+const moduleNote = noBoundaries ? `   <- ${architecture.summary}` : "";
+const byModule = (text) => (noBoundaries ? `   <- 답변: architecture=${architecture.name}` : text);
+
 const lines = [
   `스택                 ${stack}`,
-  `fsd 변형             publicApi=${fsdOpts.publicApi}  sliceCoupling=${fsdOpts.sliceCoupling}${manifest?.fsd ? "" : "   (매니페스트 없음: 기본값 가정)"}`,
+  `아키텍처 모듈        ${architecture.name}${moduleNote}`,
+  ...(graph
+    ? [
+        `  변형               publicApi=${boundaryOpts.publicApi}  sliceCoupling=${boundaryOpts.sliceCoupling}${recorded ? "" : "   (매니페스트 없음: 기본값 가정)"}`,
+      ]
+    : []),
   ``,
   `만들어진 파일        ${files.length}`,
   ...files.map((f) => `  - ${f}`),
   // 그래프가 가진 것이 아니라 디스크에 있는 것. bootstrap은 빈 레포에만 레이어
   // 디렉터리를 만들므로, 그 밖의 모든 레포에서 이 줄은 만들어진 적 없는 디렉터리를
   // 보고하고 있었다.
-  `  - ${profile.fsdRoot} 아래 레이어 디렉터리 ${fsd.layers.length}개 중 ${layerDirs.length}개 존재${
-    layerDirs.length < fsd.layers.length ? ` (없음: ${missingLayers.join(", ")})` : ""
-  }${fsdOpts.routingRoot ? ` + ${fsdOpts.routingRoot}` : ""}`,
+  ...(graph
+    ? [
+        `  - ${profile.sourceRoot} 아래 레이어 디렉터리 ${layers.length}개 중 ${layerDirs.length}개 존재${
+          layerDirs.length < layers.length ? ` (없음: ${missingLayers.join(", ")})` : ""
+        }${boundaryOpts.routingRoot ? ` + ${boundaryOpts.routingRoot}` : ""}`,
+      ]
+    : []),
   ``,
   `도구가 강제하는 규칙`,
-  `  레이어 방향        ${c.layerDirection}   (layers.json에서 파생한, 금지된 순서쌍 개수)${shadowNote(eslintShadow)}`,
-  `  슬라이스 격리      ${c.sliceIsolation}   (격리 정책, 슬라이스가 있는 레이어당 하나)${shadowNote(eslintShadow) || answered(c.sliceIsolation > 0, "답변: sliceCoupling=same-layer")}`,
-  `  public API         ${c.publicApi}   (import가 index.*를 거쳐야 하는 요소 타입 개수)${shadowNote(eslintShadow) || answered(c.publicApi > 0, "답변: publicApi=open")}`,
-  `  라우팅             ${c.routing}   (라우팅 요소, 스택에 있을 때만)${shadowNote(eslintShadow)}`,
+  `  레이어 방향        ${c.layerDirection}   (레이어 그래프에서 파생한, 금지된 순서쌍 개수)${shadowNote(eslintShadow) || byModule("")}`,
+  `  슬라이스 격리      ${c.sliceIsolation}   (격리 정책, 슬라이스가 있는 레이어당 하나)${shadowNote(eslintShadow) || byModule(answered(c.sliceIsolation > 0, "답변: sliceCoupling=same-layer"))}`,
+  `  public API         ${c.publicApi}   (import가 index.*를 거쳐야 하는 요소 타입 개수)${shadowNote(eslintShadow) || byModule(answered(c.publicApi > 0, "답변: publicApi=open"))}`,
+  `  라우팅             ${c.routing}   (라우팅 요소, 스택에 있을 때만)${shadowNote(eslintShadow) || byModule("")}`,
   `  타입               ${strictFlags}   (tsconfig.json에서 켜진 strict 계열 플래그)`,
   `  포매팅             ${prettier}   (이 하네스가 쓴 prettier 설정: 0 또는 1)${shadowNote(prettierShadow) || answered(prettier > 0, "레포 자신의 prettier 설정을 그대로 두었다")}`,
-  `  import 순서        ${importGroups}   (포매터가 정렬하는 import 그룹, 라우팅 디렉터리와 레이어당 하나)${shadowNote(prettierShadow)}`,
+  `  import 순서        ${importGroups}   (포매터가 정렬하는 import 그룹, 라우팅 디렉터리와 레이어당 하나)${
+    shadowNote(prettierShadow) ||
+    (noBoundaries && !importGroups ? `   <- 답변: architecture=${architecture.name}. 소스 루트를 위한 포괄 그룹은 여전히 쓰이지만 레이어 그룹이 아니라 세지 않는다` : "")
+  }`,
   `  경로 일관성        ${aliasesPlanted ? aliases : 0}   (${aliasNote})`,
   `  ---`,
   `  합계               ${live(eslintShadow, c.layerDirection + c.sliceIsolation + c.publicApi + c.routing) + strictFlags + live(prettierShadow, prettier + importGroups) + (aliasesPlanted ? aliases : 0)}`,
@@ -167,8 +195,8 @@ const lines = [
   `  각주: 합계는 위 줄들의 단순 합에서 가려짐으로 표시된 줄을 뺀 것이다. 도구가 절대`,
   `  로드하지 않는 설정은 누가 썼든 아무것도 강제하지 않는다.`,
   `  각 줄은 서로 다른 종류를 세므로 합계는 합이지 점수가 아니다.`,
-  `  앞의 네 줄은 tests/verify-boundaries.mjs가 이 스택과 이 변형 쌍에 대해 통과한`,
-  `  뒤에만 보고할 수 있다.`,
+  `  앞의 네 줄은 tests/verify-boundaries.mjs가 이 스택, 이 모듈, 이 변형 쌍에 대해`,
+  `  통과한 뒤에만 보고할 수 있다.`,
   ``,
   `${(pointsAt ? pointsAt[1] : "CLAUDE.md").padEnd(20)} ${tokens}토큰 (측정했을 뿐 판정하지 않음: 예산을 제시하는 1차 소스가 없다)`,
   `harness:check        ${checkStatus}`,

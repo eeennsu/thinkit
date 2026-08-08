@@ -1,7 +1,8 @@
 {
   "name": "next",
-  "fsdRoot": "src/",
+  "sourceRoot": "src/",
   "routingRoot": "app/",
+  "architecture": "fsd",
   "alias": { "@": "src" },
   "resolver": {
     "name": "typescript",
@@ -11,17 +12,18 @@
   },
   "devDependencies": {
     "eslint": "^9",
-    "eslint-plugin-boundaries": "^7",
-    "eslint-import-resolver-typescript": "^4",
     "typescript-eslint": "^8",
     "typescript": "^5",
     "eslint-plugin-react-hooks": "^7",
     "prettier": "^3",
     "@ianvs/prettier-plugin-sort-imports": "^4"
   },
+  "boundaryDevDependencies": {
+    "eslint-import-resolver-typescript": "^4"
+  },
   "files": [
     { "template": "templates/eslint.config.mjs.hbs", "dest": "eslint.config.mjs" },
-    { "template": "templates/eslint.config.boundaries.mjs.hbs", "dest": "eslint.config.boundaries.mjs" },
+    { "template": "templates/eslint.config.boundaries.mjs.hbs", "dest": "eslint.config.boundaries.mjs", "requires": "boundaries" },
     { "template": "templates/tsconfig.json.hbs", "dest": "tsconfig.json" },
     { "template": "templates/prettier.config.mjs.hbs", "dest": "prettier.config.mjs" }
   ]

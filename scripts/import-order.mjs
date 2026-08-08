@@ -1,9 +1,12 @@
-// layers.json + alias 테이블 -> 포매터의 import 순서.
+// 레이어 그래프 + alias 테이블 -> 포매터의 import 순서.
 //
 // 경계 정책과 같은 소유자. 린트 규칙은 어떤 import가 합법인지 정하고, 이쪽은 합법인
 // 것이 어디에 쓰이는지 정한다. 손으로 관리하면 둘이 어긋나고, 포매터 쪽 사본은 조용히
 // 어긋난다. import 블록이 레이어 그래프와 안 맞게 된 파일을 아무도 보고하지 않고,
 // 그냥 그래프로 읽히지 않게 될 뿐이다.
+//
+// 그래프가 없는 아키텍처 모듈에서는 레이어 그룹이 없다. 남는 것은 소스 루트 하나를 위한
+// 그룹이고, 그것은 레이어 이름을 지어내는 것보다 정직하다.
 //
 // @ianvs/prettier-plugin-sort-imports 4.7.1에 대고 확인함:
 //   - 항목은 정규식 문자열이고 순서대로 매칭되며 첫 매칭이 이긴다
@@ -58,25 +61,25 @@ export function patternFor(dir, alias = {}) {
 // 자기 그룹을 받는 디렉터리들, 쓰이는 순서대로. 라우팅 먼저, 그다음 레이어 위에서
 // 아래로 — buildElements()가 등록하는 것과 같은 순서라서, import 블록이 정책이 허용하는
 // 방향으로 읽힌다.
-export function groupDirs(fsd, profile, opts = {}) {
+export function groupDirs(graph, profile, opts = {}) {
   const o = { routingRoot: profile.routingRoot ?? null, ...opts };
-  const root = trimSlash(profile.fsdRoot);
+  const root = trimSlash(profile.sourceRoot);
   const dirs = [];
   if (o.routingRoot) dirs.push(trimSlash(o.routingRoot));
-  for (const layer of fsd.layers) dirs.push(`${root}/${layer.name}`);
+  for (const layer of graph?.layers ?? []) dirs.push(`${root}/${layer.name}`);
   return dirs;
 }
 
-export function buildImportOrder(fsd, profile, alias = {}, opts = {}) {
+export function buildImportOrder(graph, profile, alias = {}, opts = {}) {
   const order = ["<BUILTIN_MODULES>", "", "<THIRD_PARTY_MODULES>", ""];
-  for (const dir of groupDirs(fsd, profile, opts)) order.push(patternFor(dir, alias), "");
+  for (const dir of groupDirs(graph, profile, opts)) order.push(patternFor(dir, alias), "");
 
-  // fsdRoot의 나머지를 위한 포괄 항목. 레이어 패턴이 이기도록 모든 레이어 뒤에 둔다.
+  // sourceRoot의 나머지를 위한 포괄 항목. 레이어 패턴이 이기도록 모든 레이어 뒤에 둔다.
   // 이것이 없으면 소스 루트 안에 있으면서 레이어 안에는 없는 파일 — `@/config`,
   // `@/app.tsx` — 이 어느 항목에도 매칭되지 않고 패키지 옆 third-party로 분류된다.
   // FSD는 그런 파일이 없어야 한다고 말하지만, 실제 레포에는 몇 개씩 있고, 잘못
   // 분류하는 것이 항목 하나 더 있는 것보다 나쁘다.
-  const rest = patternFor(trimSlash(profile.fsdRoot), alias);
+  const rest = patternFor(trimSlash(profile.sourceRoot), alias);
   if (!order.includes(rest)) order.push(rest, "");
 
   order.push("^[.]");

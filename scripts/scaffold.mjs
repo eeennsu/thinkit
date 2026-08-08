@@ -7,9 +7,10 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "./lib/render.mjs";
 import { loadProfile, listStacks } from "./lib/profile.mjs";
+import { loadModule, listModules } from "./lib/module.mjs";
 import { plantedFiles, sha, ownedUnchanged } from "./lib/planted.mjs";
 import { readAlias } from "./lib/alias.mjs";
-import { buildElements, buildPolicies, counts, resolveOptions } from "./fsd-boundaries.mjs";
+import { buildElements, buildPolicies, counts, resolveOptions } from "./layer-boundaries.mjs";
 import { buildImportOrder, renderImportOrder } from "./import-order.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -74,7 +75,7 @@ for (const key of ["safetyBoundaries", "verification", "exceptions", "routingImp
   if (!Array.isArray(v)) shapeErrors.push(`${key}는 문자열 배열이어야 한다, 받은 타입 ${typeof v}`);
   else if (v.some((item) => typeof item !== "string")) shapeErrors.push(`${key}는 문자열만 담아야 한다`);
 }
-for (const key of ["projectName", "oneLine", "routingRoot"]) {
+for (const key of ["projectName", "oneLine", "routingRoot", "architecture"]) {
   const v = answers[key];
   if (v === undefined || v === null) continue;
   if (typeof v !== "string") shapeErrors.push(`${key}는 문자열이어야 한다, 받은 타입 ${Array.isArray(v) ? "array" : typeof v}`);
@@ -86,22 +87,36 @@ if (shapeErrors.length) {
 }
 
 const profile = loadProfile(root, stack);
-const fsd = JSON.parse(readFileSync(join(root, "modules/fsd/layers.json"), "utf8"));
 
-// fsdRoot 아래 어떤 디렉터리가 있는지는 repo-visible이므로 묻지 않고 읽는다 —
+// 아키텍처 모듈은 스택이 정하지 않고 레포가 답한다. 프로필이 지목하는 것은 인터뷰가
+// 확인받으러 들고 가는 제안이고, 답변이 이긴다. 모르는 이름은 기본값으로 떨어지는 대신
+// 멈춘다 — 오타 하나가 레포의 답으로 기록된 경계 정책을 만들어내기 때문이다.
+let architecture;
+try {
+  architecture = loadModule(root, answers.architecture ?? profile.architecture);
+} catch (e) {
+  console.error(`${e.message}\n아무것도 쓰지 않았다.`);
+  process.exit(2);
+}
+const graph = architecture.graph;
+
+// sourceRoot 아래 어떤 디렉터리가 있는지는 repo-visible이므로 묻지 않고 읽는다 —
 // routingRoot와 같은 대접이다. 이것이 없으면 그중 하나로 들어가는 모든 import가 알 수
 // 없는 의존성이 되고, --max-warnings 0으로 린트를 도는 레포는 켤 수 없는 설정을 받는다.
 // 명시적인 답변이 이긴다. 그것들이 보고되기를 원하는 레포의 `[]`도 포함해서.
-if (answers.extraRoots === undefined) {
-  const fsdRootName = profile.fsdRoot.replace(/\/+$/, "");
-  const fsdAbs = join(target, fsdRootName);
-  const known = new Set(fsd.layers.map((l) => l.name));
-  // fsdRoot 안의 routingRoot(src/app, src/navigators)는 이미 자기 요소가 레이어보다
+//
+// 경계를 강제하지 않는 모듈에는 등록할 요소가 없으므로 탐지도 하지 않는다. 거기서 읽어
+// 두면 아무 정책에도 쓰이지 않는 디렉터리 목록이 매니페스트에 기록된다.
+if (graph && answers.extraRoots === undefined) {
+  const sourceRootName = profile.sourceRoot.replace(/\/+$/, "");
+  const sourceAbs = join(target, sourceRootName);
+  const known = new Set(graph.layers.map((l) => l.name));
+  // sourceRoot 안의 routingRoot(src/app, src/navigators)는 이미 자기 요소가 레이어보다
   // 먼저 등록되어 있다. 다시 나열하면 그것을 가린다.
   const routingParts = String(answers.routingRoot ?? profile.routingRoot ?? "").replace(/\/+$/, "").split("/").filter(Boolean);
-  if (routingParts[0] === fsdRootName && routingParts[1]) known.add(routingParts[1]);
-  answers.extraRoots = existsSync(fsdAbs)
-    ? readdirSync(fsdAbs, { withFileTypes: true })
+  if (routingParts[0] === sourceRootName && routingParts[1]) known.add(routingParts[1]);
+  answers.extraRoots = existsSync(sourceAbs)
+    ? readdirSync(sourceAbs, { withFileTypes: true })
         .filter((d) => d.isDirectory() && !known.has(d.name) && !d.name.startsWith("."))
         .map((d) => d.name)
         .sort()
@@ -110,7 +125,7 @@ if (answers.extraRoots === undefined) {
 
 // 레이어 그래프가 허용하지 않는 답변에 대해 throw한다. 시끄러운 쪽이 엄격한 기본값으로
 // 조용히 떨어지는 것보다 낫다. 후자는 레포의 답으로 보고된다.
-const fsdOpts = resolveOptions(fsd, profile, answers);
+const boundaryOpts = resolveOptions(graph, profile, answers);
 const written = [];
 
 // 무엇을 쓰기 전에 읽는다. 이 실행이 무엇을 덮어써도 되는지는 매니페스트가 정한다.
@@ -159,29 +174,46 @@ function putOwned(relPath, content) {
 const { alias, source: aliasSource } = await readAlias(target, profile, ownedUnchanged(target, prev));
 const paths = Object.fromEntries(Object.entries(alias).map(([k, v]) => [`${k}/*`, [`${v}/*`]]));
 const babelAlias = Object.fromEntries(Object.entries(alias).map(([k, v]) => [k, `./${v}`]));
-const fsdRootDir = profile.fsdRoot.replace(/\/+$/, "");
-const include = [fsdRootDir];
-if (fsdOpts.routingRoot) {
-  const routingDir = fsdOpts.routingRoot.replace(/\/+$/, "");
-  // fsdRoot 안의 routingRoot는 이미 덮여 있다. 두 번 나열하면 tsconfig include에
+const sourceRootDir = profile.sourceRoot.replace(/\/+$/, "");
+const include = [sourceRootDir];
+if (boundaryOpts.routingRoot) {
+  const routingDir = boundaryOpts.routingRoot.replace(/\/+$/, "");
+  // sourceRoot 안의 routingRoot는 이미 덮여 있다. 두 번 나열하면 tsconfig include에
   // 중복 항목이 생긴다.
-  if (!routingDir.startsWith(`${fsdRootDir}/`) && routingDir !== fsdRootDir) include.push(routingDir);
+  if (!routingDir.startsWith(`${sourceRootDir}/`) && routingDir !== sourceRootDir) include.push(routingDir);
 }
 
 const vars = {
   stack,
   severity: answers.severity ?? (answers.greenfield === false ? "warn" : "error"),
-  elementsJson: JSON.stringify(buildElements(fsd, profile, fsdOpts), null, 8).replace(/\n {8}\]/, "\n      ]"),
-  policiesJson: JSON.stringify(buildPolicies(fsd, profile, fsdOpts), null, 10).replace(/\n {10}\]/, "\n          ]"),
+  elementsJson: graph
+    ? JSON.stringify(buildElements(graph, profile, boundaryOpts), null, 8).replace(/\n {8}\]/, "\n      ]")
+    : "[]",
+  policiesJson: graph
+    ? JSON.stringify(buildPolicies(graph, profile, boundaryOpts), null, 10).replace(/\n {10}\]/, "\n          ]")
+    : "[]",
+  // 경계 설정을 쓰지 않는 모듈에서는 진입 설정이 그것을 import하지 않는다. 존재하지
+  // 않는 파일을 import하는 eslint.config.mjs는 린트를 돌리는 순간 죽는다. 머리말도
+  // 함께 갈린다 — 없는 파일의 소유권을 설명하는 주석은 읽는 사람을 그 파일을 찾아
+  // 나서게 만든다.
+  boundariesImport: architecture.boundaries ? "import boundaries from './eslint.config.boundaries.mjs';\n" : "",
+  boundariesSpread: architecture.boundaries ? "  ...boundaries,\n" : "",
+  boundariesNote: architecture.boundaries
+    ? "// 경계 정책은 어느 쪽이든 다시 생성된다. 그것들은 아키텍처 모듈이 소유하고\n" +
+      "// eslint.config.boundaries.mjs에 살며 이 파일은 펼쳐 넣기만 하기 때문이다. 그 분리는\n" +
+      "// 당신의 규칙 하나를 더하는 것이 레이어 그래프를 얼리지 않게 하려고 있다.\n//\n"
+    : `// 이 레포가 고른 아키텍처 모듈("${architecture.name}")은 경계를 강제하지 않는다.\n` +
+      "// 그래서 여기 펼쳐 넣을 생성된 정책이 없다. 디렉터리 규약을 도구가 판정하게 하려면\n" +
+      "// 모듈을 고르고 다시 bootstrap한다.\n//\n",
   resolverJson: JSON.stringify(profile.resolver.settings, null, 6).replace(/\n {6}\}/, "\n    }"),
   pathsJson: JSON.stringify(paths, null, 6).replace(/\n {6}\}/, "\n    }"),
   includeJson: JSON.stringify(include),
   babelPreset: profile.babelPreset ?? "",
   aliasJson: JSON.stringify(babelAlias, null, 10).replace(/\n {10}\}/, "\n        }"),
   // 경계 정책과 같은 레이어 그래프, 같은 alias 테이블에서 만든다. 그래서 포매터가
-  // 린터가 허용하는 순서대로 import를 묶는다. 해석된 fsdOpts를 넘기는 것이 중요하다.
-  // routingRoot가 라우팅 그룹이 아예 있는지를 정한다.
-  importOrderJs: renderImportOrder(buildImportOrder(fsd, profile, alias, fsdOpts)),
+  // 린터가 허용하는 순서대로 import를 묶는다. 해석된 boundaryOpts를 넘기는 것이
+  // 중요하다. routingRoot가 라우팅 그룹이 아예 있는지를 정한다.
+  importOrderJs: renderImportOrder(buildImportOrder(graph, profile, alias, boundaryOpts)),
   // 영어 그대로 둔다. package.json이 없는 레포에서 이 값이 소문자로 npm 패키지 이름이
   // 되는데, npm 이름은 ASCII 소문자여야 한다. 한국어 자리표시자는 설치할 수 없는
   // package.json을 만든다.
@@ -197,7 +229,11 @@ const vars = {
   verificationFacts: (answers.verification ?? []).map((s) => `- ${s}`).join("\n"),
 };
 
-for (const f of profile.files) putOwned(f.dest, render(readFileSync(join(root, f.template), "utf8"), vars));
+// `requires: "boundaries"`가 붙은 산출물은 경계를 강제하는 모듈에서만 쓰인다. 목록에서
+// 빼는 대신 조건을 파일 옆에 두는 이유는, 스택이 그 파일을 여전히 지목하고 있고 어느
+// 답에서 그것이 나가는지를 프로필을 읽는 사람이 알아야 하기 때문이다.
+const files = profile.files.filter((f) => f.requires !== "boundaries" || architecture.boundaries);
+for (const f of files) putOwned(f.dest, render(readFileSync(join(root, f.template), "utf8"), vars));
 
 // 산문은 AGENTS.md에 살고 CLAUDE.md는 그것을 가리키는 한 줄이다. 하네스를 읽는 도구가
 // Claude Code 하나가 아니고, 같은 규칙을 파일 둘에 두 벌 두면 그 둘은 반드시 갈라진다.
@@ -234,22 +270,26 @@ if (answers.verification?.length)
 // diff이며, 어느 쪽이든 아무것도 매칭하지 않는 정책을 위한 것이다. 정책은 그 디렉터리가
 // 존재해야 돌아가지 않는다.
 //
-// 묻지 않고 읽는다. fsdRoot 아래 디렉터리에 우리 자신의 .gitkeep 말고 무언가 있으면
+// 묻지 않고 읽는다. sourceRoot 아래 디렉터리에 우리 자신의 .gitkeep 말고 무언가 있으면
 // 그 레포는 거기 코드를 가지고 있다.
+//
+// 그래프가 없는 모듈은 만들 레이어도 없다. 디렉터리 이름을 지어내는 것은 이 플러그인이
+// 하지 않기로 한 일이고, "경계 규약 없음"이라 답한 레포에 레이어 여섯 개를 만들어 주는
+// 것이 정확히 그 짓이다.
 const hasCode = (dir) => {
   if (!existsSync(dir)) return false;
   return readdirSync(dir, { withFileTypes: true }).some((e) =>
     e.isDirectory() ? hasCode(join(dir, e.name)) : e.name !== ".gitkeep"
   );
 };
-const greenfield = !hasCode(join(target, fsdRootDir));
+const greenfield = !hasCode(join(target, sourceRootDir));
 const absentLayers = [];
-for (const layer of fsd.layers) {
-  const rel = `${fsdRootDir}/${layer.name}`;
+for (const layer of graph?.layers ?? []) {
+  const rel = `${sourceRootDir}/${layer.name}`;
   if (greenfield) put(`${rel}/.gitkeep`, "");
   else if (!existsSync(join(target, rel))) absentLayers.push(layer.name);
 }
-if (fsdOpts.routingRoot && greenfield) put(`${fsdOpts.routingRoot.replace(/\/+$/, "")}/.gitkeep`, "");
+if (boundaryOpts.routingRoot && greenfield) put(`${boundaryOpts.routingRoot.replace(/\/+$/, "")}/.gitkeep`, "");
 
 // 체커 자체와 principle 전용 규칙 집합을 심는다. 목록과 그 내용은 lib/planted.mjs에
 // 살아서, check.mjs --fix가 bootstrap이 쓴 것과 정확히 같은 것을 갱신한다.
@@ -272,12 +312,15 @@ put(".claude/harness/manifest.json", JSON.stringify({
   version: plant.version,
   stack,
   declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) && ownsProse },
-  fsd: {
-    publicApi: fsdOpts.publicApi,
-    sliceCoupling: fsdOpts.sliceCoupling,
-    routingRoot: fsdOpts.routingRoot,
-    routingImports: fsdOpts.routingImports,
-    extraRoots: fsdOpts.extraRoots,
+  // 모듈 이름이 먼저다. 나머지 키는 그 모듈의 변형이고, 어느 모듈의 변형인지 모르면
+  // 보고서는 값을 읽고도 무엇을 세는지 알 수 없다.
+  architecture: {
+    module: architecture.name,
+    publicApi: boundaryOpts.publicApi,
+    sliceCoupling: boundaryOpts.sliceCoupling,
+    routingRoot: boundaryOpts.routingRoot,
+    routingImports: boundaryOpts.routingImports,
+    extraRoots: boundaryOpts.extraRoots,
   },
   alias: { source: aliasSource, count: Object.keys(alias).length },
   files: manifestFiles,
@@ -305,7 +348,19 @@ pkg.devDependencies = { ...pkg.devDependencies };
 // 고정한 프로필이 이긴다. 리졸버 키를 마지막에 펼치면 프로필 자신의 `^4`를 `*`로
 // 덮어써서, 생성된 설정이 해석되는지 여부를 메이저 버전이 정하는 바로 그 의존성이
 // 고정되지 않은 채 출고됐다.
-const devDeps = { [profile.resolver.devDependency]: "*", ...profile.devDependencies };
+//
+// 경계 모듈이 요구하는 것은 그 모듈이 선언한다. 리졸버와 `boundaryDevDependencies`도
+// 같은 조건에 걸린다 — 둘 다 생성된 경계 설정만 읽는 패키지라서, 그 설정을 쓰지 않는
+// 레포에 설치를 요구하면 하네스가 자기가 쓰지도 않을 의존성을 남의 package.json에
+// 남기는 것이 된다.
+const devDeps = architecture.boundaries
+  ? {
+      [profile.resolver.devDependency]: "*",
+      ...profile.devDependencies,
+      ...profile.boundaryDevDependencies,
+      ...architecture.devDependencies,
+    }
+  : { ...profile.devDependencies };
 for (const [name, range] of Object.entries(devDeps))
   if (!(name in pkg.devDependencies)) pkg.devDependencies[name] = range;
 // 여기서 레포에 속하고 소유되는 대신 편집되는 파일은 이것 하나뿐이라, 레포 자신의
@@ -339,15 +394,23 @@ const notes = [];
 }
 if (absentLayers.length)
   notes.push(
-    `${fsdRootDir}/에 이미 코드가 있어서 레이어 디렉터리를 만들지 않았다. ` +
+    `${sourceRootDir}/에 이미 코드가 있어서 레이어 디렉터리를 만들지 않았다. ` +
       `${absentLayers.join(", ")}은(는) 여기 없다. 그것들을 위한 정책은 생성됐고, ` +
       `당신이 만들기 전까지 아무것도 매칭하지 않는다.`
   );
-if (fsdOpts.extraRoots.length)
+if (boundaryOpts.extraRoots.length)
   notes.push(
-    `${profile.fsdRoot} 아래 디렉터리 ${fsdOpts.extraRoots.length}개는 레이어가 아니다 (${fsdOpts.extraRoots.join(", ")}). ` +
+    `${profile.sourceRoot} 아래 디렉터리 ${boundaryOpts.extraRoots.length}개는 레이어가 아니다 (${boundaryOpts.extraRoots.join(", ")}). ` +
       `각각 그래프 맨 아래에 등록된다. 무엇이든 그것을 import할 수 있고, 그것은 ` +
-      `${fsd.layers[fsd.layers.length - 1].name}과 나머지를 import할 수 있다. 다르게 배치하려면 extraRoots로 답한다.`
+      `${graph.layers[graph.layers.length - 1].name}과 나머지를 import할 수 있다. 다르게 배치하려면 extraRoots로 답한다.`
+  );
+// 아무것도 잘못되지 않았을 때도 적는다. 이 실행이 무엇을 하지 않았는지는 파일 목록에
+// 나타나지 않고, 경계 설정의 부재는 빠뜨린 것과 답한 것이 똑같이 보이는 유일한 산출물이다.
+if (!architecture.boundaries)
+  notes.push(
+    `아키텍처 모듈 "${architecture.name}": 경계 설정을 쓰지 않았다. ${architecture.summary} ` +
+      `나머지 하네스는 그대로 나갔고, 보고서는 강제되는 경계를 0으로 센다. ` +
+      `있는 모듈: ${listModules(root).join(", ")}.`
   );
 if (!proseIsOursToWrite)
   notes.push(
@@ -367,8 +430,13 @@ const summary = {
   target,
   notes,
   written,
-  counts: counts(fsd, profile, fsdOpts),
-  fsd: { publicApi: fsdOpts.publicApi, sliceCoupling: fsdOpts.sliceCoupling },
+  counts: counts(graph, profile, boundaryOpts),
+  architecture: {
+    module: architecture.name,
+    boundaries: architecture.boundaries,
+    publicApi: boundaryOpts.publicApi,
+    sliceCoupling: boundaryOpts.sliceCoupling,
+  },
   aliases: Object.keys(alias).length,
   aliasSource,
 };
