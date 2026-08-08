@@ -30,24 +30,29 @@
   "files": [
     {
       "template": "templates/eslint.config.mjs.hbs",
-      "dest": "eslint.config.mjs"
+      "dest": "eslint.config.mjs",
+      "regenerated": true
     },
     {
       "template": "templates/eslint.config.boundaries.mjs.hbs",
       "dest": "eslint.config.boundaries.mjs",
-      "requires": "boundaries"
+      "requires": "boundaries",
+      "regenerated": true
     },
     {
       "template": "templates/tsconfig.json.hbs",
-      "dest": "tsconfig.json"
+      "dest": "tsconfig.json",
+      "regenerated": true
     },
     {
       "template": "templates/prettier.config.mjs.hbs",
-      "dest": "prettier.config.mjs"
+      "dest": "prettier.config.mjs",
+      "regenerated": true
     },
     {
       "template": "stacks/rn-base/configs/babel.config.js.hbs",
-      "dest": "babel.config.js"
+      "dest": "babel.config.js",
+      "regenerated": true
     }
   ]
 }

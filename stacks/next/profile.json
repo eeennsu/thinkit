@@ -22,9 +22,9 @@
     "eslint-import-resolver-typescript": "^4"
   },
   "files": [
-    { "template": "templates/eslint.config.mjs.hbs", "dest": "eslint.config.mjs" },
-    { "template": "templates/eslint.config.boundaries.mjs.hbs", "dest": "eslint.config.boundaries.mjs", "requires": "boundaries" },
-    { "template": "templates/tsconfig.json.hbs", "dest": "tsconfig.json" },
-    { "template": "templates/prettier.config.mjs.hbs", "dest": "prettier.config.mjs" }
+    { "template": "templates/eslint.config.mjs.hbs", "dest": "eslint.config.mjs", "regenerated": true },
+    { "template": "templates/eslint.config.boundaries.mjs.hbs", "dest": "eslint.config.boundaries.mjs", "requires": "boundaries", "regenerated": true },
+    { "template": "templates/tsconfig.json.hbs", "dest": "tsconfig.json", "regenerated": true },
+    { "template": "templates/prettier.config.mjs.hbs", "dest": "prettier.config.mjs", "regenerated": true }
   ]
 }

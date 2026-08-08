@@ -150,7 +150,7 @@ function put(relPath, content) {
 //   디스크에 없거나, 우리가 마지막에 쓴 그대로 있다 -> 우리 것, 갱신한다
 //   디스크에 있는데 기록된 적이 없다                -> 레포의 것, 둔다
 //   기록됐는데 그 뒤로 바뀌었다                     -> 로컬에서 편집됨, 둔다
-function putOwned(relPath, content) {
+function putOwned(relPath, content, profileFile) {
   const abs = join(target, relPath);
   const recorded = prev?.files.find((f) => f.path === relPath);
   if (existsSync(abs)) {
@@ -165,7 +165,9 @@ function putOwned(relPath, content) {
     }
   }
   put(relPath, content);
-  manifestFiles.push({ path: relPath, sha256: sha(Buffer.from(content, "utf8")) });
+  const entry = { path: relPath, sha256: sha(Buffer.from(content, "utf8")) };
+  if (profileFile?.regenerated) entry.regenerated = true;
+  manifestFiles.push(entry);
 }
 
 // alias 테이블은 하나다. tsconfig paths와 babel alias 둘 다 여기서 파생된다. 손으로 쓴
@@ -233,7 +235,7 @@ const vars = {
 // 빼는 대신 조건을 파일 옆에 두는 이유는, 스택이 그 파일을 여전히 지목하고 있고 어느
 // 답에서 그것이 나가는지를 프로필을 읽는 사람이 알아야 하기 때문이다.
 const files = profile.files.filter((f) => f.requires !== "boundaries" || architecture.boundaries);
-for (const f of files) putOwned(f.dest, render(readFileSync(join(root, f.template), "utf8"), vars));
+for (const f of files) putOwned(f.dest, render(readFileSync(join(root, f.template), "utf8"), vars), f);
 
 // 산문은 AGENTS.md에 살고 CLAUDE.md는 그것을 가리키는 한 줄이다. 하네스를 읽는 도구가
 // Claude Code 하나가 아니고, 같은 규칙을 파일 둘에 두 벌 두면 그 둘은 반드시 갈라진다.

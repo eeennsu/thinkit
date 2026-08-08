@@ -264,7 +264,8 @@ function plantedState() {
     const p = join(target, f.path);
     if (!existsSync(p)) return { path: f.path, state: "missing" };
     const now = sha(p);
-    if (now !== f.sha256) return { path: f.path, state: "edited-locally", advice: "손으로 병합한다. 덮어쓰지 않는다" };
+    const isLocallyEdited = now !== f.sha256;
+    if (isLocallyEdited && !f.regenerated) return { path: f.path, state: "edited-locally", advice: "손으로 병합한다. 덮어쓰지 않는다" };
     if (canonicalVersion === null)
       return { path: f.path, state: "current", advice: "심긴 뒤로 바뀌지 않았다. 플러그인이 앞서 나갔는지는 여기서 확인할 수 없다" };
     if (manifest.version !== canonicalVersion) return { path: f.path, state: "outdated", advice: "다시 생성한다" };
