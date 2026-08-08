@@ -30,7 +30,7 @@
         "생각하지 마라",
         "추론하지 마라"
       ],
-      "source": "P5 - Task scope and over-verification; Self-correction; Response length and verbosity"
+      "source": "P5 - Response length and verbosity; User-facing progress updates; Written deliverable length; Task scope and over-verification; Controlling subagent spawning; Self-correction"
     },
     "review_instruction_form": {
       "value": { "cutoff_instructions": "harmful", "required_form": "전부 보고하고, 필터링은 별도 패스에서" },

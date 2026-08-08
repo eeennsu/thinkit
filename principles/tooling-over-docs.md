@@ -21,10 +21,9 @@
 | 레이어 그래프와 일치하는 import 순서 | `@ianvs/prettier-plugin-sort-imports`, `layers.json`에서 생성한 `importOrder` |
 | 경로 alias 일관성 | `tsconfig.json`에서 파생 |
 | 훅 호출 순서, 낡은 의존성 배열 | `react-hooks/rules-of-hooks`, `react-hooks/exhaustive-deps` |
-| 변경에 남은 디버그 출력 | `no-console` |
 | 리팩터링 후 안 쓰이게 된 바인딩 | `@typescript-eslint/no-unused-vars`, 빠지려면 `^_` |
 
-마지막 세 개는 지금 코드를 누가 쓰는지 때문에 있다. 각각은 레포가 아니었으면 CLAUDE.md에
+마지막 둘은 지금 코드를 누가 쓰는지 때문에 있다. 각각은 레포가 아니었으면 CLAUDE.md에
 넣고 요청마다 값을 치렀을 문장이고, 각각은 동작하는 코드처럼 보이는 실수를 서술한다.
 `^_` 접두어는 장식이 아니다. "그렇다, 일부러다"라고 말할 방법이 없는 규칙은 처음 불편할 때
 통째로 꺼진다.
