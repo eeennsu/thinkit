@@ -16,8 +16,11 @@ description: 스택 이름을 받아 새 레포나 설정되지 않은 레포의
    import를 실제로 어떻게 쓰는지, 라우트가 어디에 등록되는지. 이것이 Q4·Q6·Q7의 기본값을
    정하고 `routingRoot`를 통째로 공급한다. 읽어서 알 수 있는 것은 묻지 않는다. 다만 읽은
    것이 규칙이 되기 전에 확인은 받는다.
-3. **인터뷰.** `references/interview.md`. 여덟 개 질문, 각각 존재 이유가 붙어 있다.
-   질문을 건너뛰는 것은 그 항목 자신이 대는 이유일 때만이다.
+3. **인터뷰.** `${CLAUDE_PLUGIN_ROOT}/skills/harness-bootstrap/references/interview.md`.
+   여덟 개 질문, 각각 존재 이유가 붙어 있다. 질문을 건너뛰는 것은 그 항목 자신이 대는
+   이유일 때만이다. 묻는 방법은 `AskUserQuestion`이다 — 질문마다 선택지를 내고, 2단계에서
+   읽은 것이 있으면 그것을 기본값으로 얹어 확인을 받는다. 산문으로 나열하고 답을 기다리는
+   것은 답이 아니라 침묵을 받는다.
 4. **Scaffold.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.mjs" <stack> --target <repo> --answers <file>`.
 5. **Check.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/check.mjs" --mode full --target <repo>`.
 6. **Report.** `node "${CLAUDE_PLUGIN_ROOT}/scripts/report.mjs" <stack> --target <repo>`.

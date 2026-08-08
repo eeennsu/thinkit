@@ -131,13 +131,16 @@ const machine = {
   },
   "claude-md.gotcha-section": (rule) => {
     if (claudeMd === null) return;
+    // 두 밴드다. 제목이 아예 없는 것과, 제목은 있는데 비어 있는 것. 둘의 심각도는 각각
+    // rules.json이 정한다 - 여기서 고정하면 선언과 구현이 갈라지고, 갈라진 쪽을 읽은
+    // 사람은 자기가 못 본 값을 믿는다.
     if (!/^##\s+함정\s*$/m.test(claudeMd)) {
-      add(rule, "warn", "함정 섹션이 없다.");
+      add(rule, rule.severity, "함정 섹션이 없다.");
       return;
     }
     const body = claudeMd.split(/^##\s+함정\s*$/m)[1] ?? "";
     const text = body.replace(/<!--[\s\S]*?-->/g, "").split(/^##\s/m)[0].trim();
-    if (!text) add(rule, "info", rule.audit.empty.message);
+    if (!text) add(rule, rule.audit.empty.severity, rule.audit.empty.message);
   },
   "claude-md.repo-visible.structural": (rule) => {
     if (claudeMd === null) return;
@@ -145,10 +148,12 @@ const machine = {
     for (const block of claudeMd.match(/```[\s\S]*?```/g) ?? []) {
       if (/[├└│]──/.test(block)) hits.push("코드펜스 블록 안의 디렉터리 트리");
     }
+    // 임계값 5와 3에는 1차 소스가 없다. 지어내지 않고 지우지도 않되, 발견 줄이 그것을
+    // 말한다 - 숫자가 근거처럼 읽히면 안 된다. `claude_md_budget`과 같은 처치다.
     const pathish = (claudeMd.match(/^\s*[-*]?\s*[\w.@/-]+\/[\w.@/-]+\s*$/gm) ?? []).length;
-    if (pathish >= 5) hits.push(`경로형 줄 ${pathish}개`);
+    if (pathish >= 5) hits.push(`경로형 줄 ${pathish}개 (임계값 5는 휴리스틱이다)`);
     if (/\.(ts|tsx|js|jsx)\b.*\.(ts|tsx|js|jsx)\b.*\.(ts|tsx|js|jsx)\b/.test(claudeMd))
-      hits.push("확장자 나열");
+      hits.push("확장자 나열 (연속 3개 기준은 휴리스틱이다)");
     for (const h of hits) add(rule, rule.severity, `repo-visible로 읽힌다: ${h}.`);
   },
   "safety.declared-boundaries-present": (rule) => {

@@ -33,12 +33,20 @@ description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에
 
 `pending` 발견마다 자기 루브릭을 지목한다.
 
-| 발견 | 루브릭 |
+| 규칙 id | 루브릭 |
 | --- | --- |
-| repo-visible 산문, 알맹이 없는 스킬 | `principles/gotcha-vs-repo-visible.md` |
-| 중복된 규칙, 메모리 로그, 절대 규칙 | `principles/ownership-map.md` |
-| 도구가 소유할 수 있는 규칙 | `principles/tooling-over-docs.md` |
-| 모델 기본값을 되풀이하는 지시, 리뷰 컷오프 | `references/judgement-calls.md` |
+| `claude-md.repo-visible.prose` | `${CLAUDE_PLUGIN_ROOT}/principles/gotcha-vs-repo-visible.md` |
+| `skill.without-repo-specific-content` | `${CLAUDE_PLUGIN_ROOT}/principles/gotcha-vs-repo-visible.md` |
+| `rule.single-ownership` | `${CLAUDE_PLUGIN_ROOT}/principles/ownership-map.md` |
+| `claude-md.memory-log` | `${CLAUDE_PLUGIN_ROOT}/principles/ownership-map.md` |
+| `rule.absolute-without-exception` | `${CLAUDE_PLUGIN_ROOT}/principles/ownership-map.md` |
+| `tooling.enforceable-rule-in-doc` | `${CLAUDE_PLUGIN_ROOT}/principles/tooling-over-docs.md` |
+| `instruction.duplicates-model-default` | `${CLAUDE_PLUGIN_ROOT}/skills/harness-audit/references/judgement-calls.md` |
+| `review.cutoff-instruction` | `${CLAUDE_PLUGIN_ROOT}/skills/harness-audit/references/judgement-calls.md` |
+
+id로 키를 잡는 것은 `check.mjs`가 발견에 id를 실어 보내기 때문이다. 서술로 키를 잡으면
+손에 이미 있는 id를 되추론하게 된다. 경로가 `${CLAUDE_PLUGIN_ROOT}`인 것도 같은 이유다 —
+상대 경로는 감사 대상 레포를 기준으로 풀리고 거기엔 이 파일들이 없다.
 
 판정하기 전에 실제 파일을 읽는다. 인용한 줄이 없는 발견은 추측이다.
 
@@ -55,7 +63,9 @@ description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에
 
 ## --fix를 쓸 때
 
-다섯 가지 처치. 넷은 더하고 하나는 지운다.
+`--fix`가 하는 처치는 다섯이다. 넷은 더하고 하나는 지운다. 여섯 번째 처치 — 소유자의 답을
+받아 적는 것 — 은 `--fix`가 아니라 모델이 하고, 위 「답을 받으면」이 소유한다. 스크립트는
+소유자를 부를 수 없으므로 그 처치는 여기 표에 들어오지 않는다.
 
 | 고치는 것 | 고치지 않는 것 |
 | --- | --- |
@@ -83,16 +93,33 @@ import가 여럿이거나 CLAUDE.md가 자기 산문도 지니면 어느 쪽인�
 
 ## 산문을 지우기 전에 지나는 관문
 
-`--fix`가 판단 항목을 처리하려면 `check.mjs`가 내놓는 `[enforced]` 표를 먼저 읽는다.
+이 관문은 **모델의 것이다.** 스크립트의 `--fix`에는 산문을 지우는 분기가 없다.
+
+모델은 **자기 판단으로는** 편집하지 않는다. 편집하는 것은 소유자가 건넨 그 문자열뿐이고,
+자리는 발견이 인용한 그 자리뿐이다.
+
+예외는 `full` 한 줄이다. 거기서의 삭제는 새 주장을 만들지 않고 이미 도구가 소유한 규칙을
+걷어내는 것이라, 소유자 입력 없이도 모델이 수행한다. 판정 근거는 `[enforced]` 표의 `full`
+상태 하나뿐이고, `partial`·`none`·`unknown`에서는 어떤 삭제도 없다.
+
+판단 항목을 처리하려면 `check.mjs`가 내놓는 `[enforced]` 표를 먼저 읽는다.
 그 표는 대상 레포의 eslint·tsconfig·포매터 설정과 `package.json`을 실제로 읽어서, 규칙
 하나하나가 **지금 그 레포에서** 어떤 상태인지 답한다.
 
 | 상태 | 뜻 | 처치 |
 | --- | --- | --- |
-| `full` | 스코프 제한 없이 걸린다 | 문서에서 지운다 |
-| `partial` | 일부 경로에만 걸린다 | **지우지 않는다.** 어느 경로가 비었는지 보고한다 |
-| `none` | 설정에 없다 | 지우지 않는다. 도구로 옮길지는 소유자가 정한다 |
-| `unknown` | 설정을 읽지 못했다 | 지우지 않는다 |
+| `full` | 스코프 제한 없이 걸린다 | 문서에서 지운다. `[묻지 않음]` — 판정에 레포의 의도가 들어가지 않는다 |
+| `partial` | 일부 경로에만 걸린다 | (a) 어느 경로가 비었는지 보고만 한다 (b) 소유자가 입력한 대체 줄로 그 줄을 교체한다 |
+| `none` | 설정에 없다 | (a) 보고만 한다 (b) 도구로 옮긴다 |
+| `unknown` | 설정을 읽지 못했다 | 지우지 않는다. `[묻지 않음]` — 읽지 못한 것은 답을 물을 근거가 아니다 |
+
+`partial`과 `none`은 `AskUserQuestion`으로 묻는다. `full`과 `unknown`은 묻지 않는데,
+그것이 판단을 아끼려는 것이 아니라 물을 것이 없기 때문이다 — `full`은 레포의 의도가
+판정에 들어가지 않고, `unknown`은 답을 물을 근거 자체를 못 읽었다.
+
+`partial` (b)의 교체 권한은 **발견이 인용한 그 줄 하나**에만 미치고, 소유자가 입력한 문장으로만
+교체한다. 요약도 병합도 없다. 린터 설정을 넓히는 선택지는 없다 — `eslint.config.mjs`는
+bootstrap이 레포의 몫으로 선언한 파일이다.
 
 `partial`이 이 표의 존재 이유다. "widgets끼리 / features끼리 import 금지"가 한 줄인데
 린터는 widgets 쪽만 막고 있으면, 지우는 순간 features 규칙은 아무 데도 없다. 올바른
@@ -102,9 +129,75 @@ import가 여럿이거나 CLAUDE.md가 자기 산문도 지니면 어느 쪽인�
 삭제를 막지만 소유자에게 하는 말이 다르고, 읽지 못한 것을 없는 것으로 보고하면 돌지
 않은 검사가 통과한 검사처럼 보인다.
 
-표에 없는 항목 — `instruction.duplicates-model-default`, `review.cutoff-instruction`,
-`claude-md.memory-log` — 은 도구 문제가 아니다. "이게 아직 유효한 방침인가"는 설정을
-읽어서 답할 수 없으므로 지우지 않고 소유자에게 묻는다.
+이 표는 규칙 id가 아니라 **린트 항목**으로 키를 잡는다 — `formatting`, `import-order`,
+`no-explicit-any`, `layer-direction`, `slice-isolation`, `relative-imports`, `no-console`,
+`unused-vars`, `package-manager`. 발견은 `tooling.enforceable-rule-in-doc` 같은 id를 지니고,
+둘 사이의 매핑은 어디에도 없다. 그러므로 관문은 **도구가 소유할 수 있는 규칙에 대해서만**
+돌고, 그 규칙이 어느 린트 항목에 해당하는지는 판정하는 쪽이 짚는다.
+
+나머지 판단 항목 — `instruction.duplicates-model-default`, `review.cutoff-instruction`,
+`claude-md.memory-log` 같은 것 — 은 도구 문제가 아니다. "이게 아직 유효한 방침인가"는 설정을
+읽어서 답할 수 없으므로 지우지 않고 소유자에게 묻는다. 무엇을 묻는지는 아래 절이 지닌다.
+
+## 소유자에게 묻는 것
+
+`rules.json`이 `audit.asks`를 선언한 규칙은 그 질문을 `AskUserQuestion`으로 그대로 띄운다.
+질문을 지어내지 않는다 — 여기 없는 것은 물을 것이 없는 것이다.
+
+| 규칙 id | 언제 뜨나 |
+| --- | --- |
+| `claude-md.memory-log` | CLAUDE.md에 지난 작업의 기억이 섞였을 때 |
+| `rule.absolute-without-exception` | 예외가 붙지 않은 절대 규칙이 있을 때 |
+| `tooling.enforceable-rule-in-doc` | 도구가 소유할 수 있는 규칙이 문서에 남아 있을 때 |
+| `skill.without-repo-specific-content` | 스킬에 이 레포 고유의 것이 없을 때 |
+| `instruction.duplicates-model-default` | 기본값이 반대인 축에 지시가 비어 있을 때 |
+| `review.cutoff-instruction` | 리뷰 보고를 잘라내라는 줄이 있을 때 |
+
+뒤의 둘은 `axis: calibrated`에 `on_unset: drop`이다. 캘리브레이션이 그 값을 모르면 규칙
+자체가 떨어지므로 질문도 뜨지 않는다. 정적으로는 여섯이고 한 번 도는 데 뜨는 것은 넷일 수 있다.
+
+## 답을 받으면
+
+지우는 답은 지운다. **문장을 남기라는 답은 받아 적는다** — 우리가 쓰는 것이 아니라 소유자가
+입력한 그 문자열을 우리가 소유한 제목 아래 기록하는 것이다.
+
+- 소유자가 입력하지 않은 문장은 쓰지 않는다. 요약도 다듬기도 없다.
+- 제목을 새로 만들지 않는다. 대상 제목이 없으면 기록하지 않고 보고한다.
+- CLAUDE.md가 남을 가리키는 포인터(`@docs/rules.md`)면 기록하지 않는다. 그건 남의 산문이고
+  CLAUDE.md와 같은 보호를 받는다. `@AGENTS.md`이고 그 AGENTS.md가 우리 것이면 기록하되,
+  기록하는 경로는 `AGENTS.md`다 — 산문이 사는 파일이 대상이다.
+- repo-visible이 되는 답은 기록하지 않는다. **이 경계는 판단이고 기계가 붙들지 않는다** —
+  구조적 repo-visible만 검사가 있고, 타이핑된 산문의 repo-visible은 판단 항목이라 종료
+  코드에서 빠진다. 덮여 있다고 믿지 않는다.
+
+기록한 것은 매니페스트에 남긴다.
+
+```json
+"transcribed": [
+  { "path": "AGENTS.md", "heading": "안전 경계", "sha": "<기록한 문자열의 sha>", "deleted": false }
+]
+```
+
+`files`에 넣지 않는다. 그 배열의 `sha256`은 전체 파일 해시라, 우리가 심은 적 없는 파일이
+영구히 `edited-locally`로 보고된다.
+
+다시 묻기 전에 이 기록을 본다. `heading` 아래 섹션을 뽑아 해시하고 `sha`와 맞춘다.
+
+| 비교 | 뜻 | 처치 |
+| --- | --- | --- |
+| 같다 | 우리가 적은 그대로다 | 다시 묻지 않는다 |
+| 다르다 | 소유자가 고쳤다 | 그쪽이 정본이다. 다시 묻지 않는다 |
+| 없다 | 소유자가 지웠다 | 다시 묻지 않는다. 항목을 **지우지 않고** `"deleted": true`를 단다 |
+
+마지막 줄이 요점이다. 기록을 지우면 다음 실행이 답이 있었다는 사실을 잃고 같은 질문을 다시
+띄운다. 소유자가 일부러 지운 것이 질문으로 되살아나는 것이고, 그건 이 플러그인이 다른
+자리에서 금지한 실패다.
+
+기록 직후 `--mode principles --json`을 다시 돌린다. 기록 전에 없던
+`claude-md.repo-visible.structural`이 새로 들어오면 거부하고 되돌린다. 종료 코드로 걸지
+않는다 — 그 규칙은 `warn`이라 떠도 0이다. 보는 것은 **발견 id 집합의 차분**이다.
+쓰기 직전 대상 파일 내용을 잡아두고, 거부하면 그것을 다시 쓴다. 트랜잭션이 없으므로 그렇게 한다.
+답을 여럿 기록하는 패스라면 스냅샷은 **쓰기마다** 뜬다.
 
 심어진 파일을 갱신하려면 정본 내용이 필요하므로, 감사가 플러그인에서 돌 때만 작동한다.
 혼자 호출된 심어진 사본은 낡음을 보고하고 bootstrap을 다시 돌리라고 말한다.

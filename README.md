@@ -53,6 +53,8 @@ Node 18.18+ (ESLint 9의 요구). `package.json`은 없으면 만들고, 있으�
 node tests/verify-profiles.mjs                        설치 불필요
 node tests/verify-scaffold.mjs                        설치 불필요
 node tests/verify-brownfield.mjs                      설치 불필요
+node tests/verify-harness-surface.mjs                 설치 불필요
+node tests/verify-harness-surface.mjs --self-test     설치 불필요
 node tests/verify-boundaries.mjs   --sandbox <dir>
 node tests/verify-rules.mjs        --sandbox <dir>
 node tests/verify-import-order.mjs --sandbox <dir>
