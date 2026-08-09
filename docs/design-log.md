@@ -11,6 +11,16 @@ bootstrap과 audit은 **같은 판정 기준을 시점만 다르게** 적용한�
 플러그인은 하나(`thinkit`)고 레포 루트가 곧 플러그인 루트다. 스택은 플러그인이 아니라 **인자**다 —
 `/harness-bootstrap rn-cli`.
 
+레포 소유자가 밝힌 1번 목적은 이미 세팅된 레포의 하네스를 새 모델 세대에 맞게 빠르게 갱신하는
+것이다. 이 갱신은 **pull이지 push가 아니다.** `calibration/`에 새 세대 파일을 더하고
+`index.json`의 default를 옮겨도, 이미 bootstrap된 레포에 심어진 `.claude/harness/check.mjs`는
+principle 축만 도는 `--mode principles`로 등록돼 있어(등록 자리는 `scripts/scaffold.mjs`의
+`pkg.scripts["harness:check"]`, 심어진 사본이 `--mode full`로 못 도는 것은 `scripts/check.mjs`의
+`isPlantedCopy` 가드, 캘리브레이션을 읽는 것은 `mode === "full"` 블록뿐이라는 사실이 함께
+막는다) 바뀐 캘리브레이션 값을 보지 않는다. 새 기준은 소유자가 플러그인에서 `/harness-audit`를
+다시 돌릴 때만 온다. 낡은 값이 남의 레포에 복사되지 않는다는 점에서 이 pull 모델 자체는
+의도이고 옳다.
+
 ## 확정된 문법 — eslint-plugin-boundaries v7.1.0
 
 v6에서 개명·변경된 것들이라 v6 예시를 그대로 쓰면 안 된다.
@@ -268,7 +278,7 @@ planted 사본은 정본 내용을 갖고 있지 않으므로 스스로 갱신�
 
 - `modules/fsd/rationale.md`가 "가능하지만 안 한다"로 남겨둔 두 건: `@x` cross-import, 세그먼트 규칙.
   레포가 실제로 요구하기 전에는 설계하지 않는다.
-- 배포 경로(npm / marketplace 등록)와 LICENSE. **아직 착수하지 않았다.**
+- 배포 경로(npm / marketplace 등록). **아직 착수하지 않았다.** LICENSE는 MIT로 추가했다(2026-08-08).
 
 ## README와 CLAUDE.md의 경계
 
@@ -900,3 +910,11 @@ bootstrap SKILL.md: "`eslint.config.boundaries.mjs`는 ... 실행마다 다시 �
 `.claude/harness/check.mjs`의 심어진 사본은 프로필을 지니지 않으므로 `[enforced]` 표의
 경계 판정도, 여기 적은 종료 코드 판정도 온전히 하지 못한다. 지금은 `--mode principles`가
 그것을 지니지 않는다는 사실로만 방어된다.
+
+## description에 영문을 병기했다 (2026-08-09)
+
+`skills/harness-audit/SKILL.md`·`skills/harness-bootstrap/SKILL.md`의 frontmatter
+description과 `.claude-plugin/plugin.json`의 description에 영문을 병기했다. 셋 다 산문이
+아니라 **매칭 표면**이다 — 마켓플레이스와 스킬 검색이 이 문자열로 후보를 고르고, 한국어
+단독이면 영어로 검색하는 사용자에게 이 플러그인도 두 스킬도 걸리지 않는다. `phrases`에
+영어 항목을 남기는 것과 같은 이유다: 지우면 찾아야 할 자리에서 못 찾는다.

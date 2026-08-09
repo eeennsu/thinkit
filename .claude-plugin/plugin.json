@@ -1,7 +1,8 @@
 {
   "name": "thinkit",
-  "description": "레포 소유자만 답할 수 있는 것을 물어서 레포 하네스를 세운다.",
+  "description": "레포 소유자만 답할 수 있는 것을 물어서 레포 하네스를 세운다. Sets up a repo's harness by asking the owner only what they can answer.",
   "version": "0.3.0",
+  "license": "MIT",
   "author": {
     "name": "eeennsu",
     "url": "https://github.com/eeennsu"

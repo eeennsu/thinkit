@@ -1,6 +1,6 @@
 ---
 name: harness-bootstrap
-description: 스택 이름을 받아 새 레포나 설정되지 않은 레포의 하네스(CLAUDE.md, 스킬, 레퍼런스, 린트 경계)를 세울 때 쓴다.
+description: 스택 이름을 받아 새 레포나 설정되지 않은 레포의 하네스(CLAUDE.md, 스킬, 레퍼런스, 린트 경계)를 세울 때 쓴다. Use this to set up a harness (CLAUDE.md, skills, references, lint boundaries) for a new or unconfigured repo, given a stack name.
 ---
 
 # 하네스 bootstrap
