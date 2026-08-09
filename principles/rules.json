@@ -129,7 +129,7 @@
       "rubric": "skills/harness-audit/references/judgement-calls.md",
       "audit": {
         "check": "agent-reads-all-instructions",
-        "asks": "기본값이 원하는 것보다 넓게 도는 축 — 응답 길이, 나레이션, 문서 길이, 작업 범위, 위임 — 중에 이 하네스가 아직 아무 말도 하지 않은 것이 있나?"
+        "asks": "기본값이 원하는 것보다 넓게 도는 축 — {{model_defaults.wide_axes}} — 중에 이 하네스가 아직 아무 말도 하지 않은 것이 있나?"
       },
       "source": "P5: remove them; they compound with the model's own behavior"
     },
@@ -137,13 +137,15 @@
       "id": "review.cutoff-instruction",
       "axis": "calibrated",
       "calibrated_by": "review_instruction_form",
+      "on_value_key": "cutoff_instructions",
+      "on_value": { "harmful": "keep", "harmless": "drop" },
       "on_unset": "drop",
       "decidable": "judgement",
       "severity": "error",
       "rubric": "skills/harness-audit/references/judgement-calls.md",
       "audit": {
         "check": "agent-reads-review-instructions",
-        "asks": "리뷰에 「중요한 것만」이나 「보수적으로」를 요구하는 줄이 있나? 그 줄이 잘라내는 것을 나중에 되찾을 방법이 있나?"
+        "asks": "리뷰어에게 덜 보고하라고 요구하는 줄이 있나? 캘리브레이션이 찾으라는 문구는 이 발견의 phrases에 있다. 그 줄이 잘라내는 것을 나중에 되찾을 방법이 있나?"
       },
       "source": "P5: ask it to report everything and filter in a separate pass"
     },

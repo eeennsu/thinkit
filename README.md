@@ -22,7 +22,9 @@
 
 둘은 **같은 판정 기준을 시점만 다르게** 적용한다. 기준은 `principles/rules.json` 한 파일에
 살아서, 부트스트랩이 통과시킨 것을 감사가 잡아내는 일은 생기지 않는다. 스택은 플러그인이
-아니라 인자다.
+아니라 인자다. 판정 기준의 세대 기준선은 `calibration/index.json`이 가리키고, 그것이 움직이면
+다음 `/harness-audit`부터 적용된다 — 레포에 심어진 `harness:check`는 세대 축을 읽지 않는다.
+왜 그런지는 [docs/design-log.md](docs/design-log.md)에 있다.
 
 ## 아키텍처는 슬롯이다
 
@@ -55,12 +57,13 @@ node tests/verify-scaffold.mjs                        설치 불필요
 node tests/verify-brownfield.mjs                      설치 불필요
 node tests/verify-harness-surface.mjs                 설치 불필요
 node tests/verify-harness-surface.mjs --self-test     설치 불필요
+node tests/verify-canon-sources.mjs                   설치 불필요
 node tests/verify-boundaries.mjs   --sandbox <dir>
 node tests/verify-rules.mjs        --sandbox <dir>
 node tests/verify-import-order.mjs --sandbox <dir>
 ```
 
-앞의 셋은 아무것도 설치하지 않고 돈다. 나머지 셋은 실제 ESLint와 Prettier로 돌고, 위반
+「설치 불필요」가 붙은 것들은 아무것도 설치하지 않고 돈다. 나머지 셋은 실제 ESLint와 Prettier로 돌고, 위반
 픽스처만으로는 올바른 config와 모든 것을 차단하는 config를 구분하지 못하므로 **대조군**이
 함께 들어간다. 각 테스트가 무엇을 증명하고 왜 그 형태인지는
 [docs/design-log.md](docs/design-log.md)에 있다.
@@ -78,3 +81,5 @@ node tests/verify-import-order.mjs --sandbox <dir>
 | 원문 아카이브             | [docs/references/](docs/references/)                     |
 
 기여자가 어기면 안 되는 것은 [CLAUDE.md](CLAUDE.md)에 있다. 한 규칙에 소유자는 하나다.
+
+라이선스: MIT — [LICENSE](LICENSE).

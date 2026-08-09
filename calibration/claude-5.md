@@ -30,6 +30,16 @@
         "생각하지 마라",
         "추론하지 마라"
       ],
+      "wide_axes": ["response_length", "narration", "written_document_length", "scope_expansion", "subagent_delegation"],
+      "labels": {
+        "self_verification": "자기 검증",
+        "self_correction": "자기 교정",
+        "narration": "나레이션",
+        "response_length": "응답 길이",
+        "written_document_length": "문서 길이",
+        "scope_expansion": "작업 범위",
+        "subagent_delegation": "위임"
+      },
       "source": "P5 - Response length and verbosity; User-facing progress updates; Written deliverable length; Task scope and over-verification; Controlling subagent spawning; Self-correction"
     },
     "review_instruction_form": {
@@ -82,6 +92,14 @@
 넓게 돈다. 그 방향은 지울 지시가 아니라 *더할* 지시를 낳고, 그래서 이 값은 지울 것들의
 목록이 아니라 표다.
 
+`wide_axes`는 그중 넓게 도는 축들을 `value`의 키 이름으로 부르고,
+`instruction.duplicates-model-default`의 질문이 `{{model_defaults.wide_axes}}`로 그것을
+렌더한다. 이 목록이 여기 사는 이유는 `principles/rules.json`에 문장으로 적힌 같은 다섯
+축이 세대와 함께 움직일 수 없었기 때문이다 — `narration`을 `low`로 되돌린 세대에서 그
+문장은 거짓이 되는데 규칙 파일은 세대를 모른다. `labels`는 그 키들의 한국어 표시명이고,
+질문이 한국어 산문이라 존재한다. 목록이 비면 질문은 반쪽으로 나가는 대신 `on_unset`
+경로로 떨어진다.
+
 ## review_instruction_form
 
 > 리뷰 프롬프트에 "높은 심각도 문제만 보고하라"거나 "보수적으로 하라"가 있으면, 모델은
@@ -90,6 +108,11 @@
 
 `review.cutoff-instruction`이 소비한다. 캘리브레이션 항목 중 유일하게
 `severity: error`다 — 컷오프 지시는 토큰을 낭비하는 게 아니라 발견을 없앤다.
+
+그 규칙의 `on_value`가 보는 것은 `cutoff_instructions`다. 지금 값 `harmful`은 `keep`으로
+풀린다. 컷오프가 무해해지는 세대는 이 값을 `harmless`로 적고, 그러면 규칙은 값이 지워지는
+일 없이 은퇴한다. 은퇴시키려고 값을 지우는 것은 1차 소스가 없는 척하는 것이고, 그건
+거짓이다.
 
 ## claude_md_budget
 

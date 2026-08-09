@@ -6,8 +6,9 @@
 // 여기 있는 모든 경우는 적히기 전에 실제 레포에서 측정됐다. 샌드박스가 필요 없다.
 // eslint를 부르지 않는데, 시험 대상이 생성된 규칙이 무엇을 잡는지가 아니라 스크립트가
 // 무엇을 읽고 무엇을 주장하는지이기 때문이다.
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, cpSync, mkdtempSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { stripJsonc, parseJsonc } from "../scripts/lib/jsonc.mjs";
@@ -635,6 +636,304 @@ console.log("심어진 파일과 종료 코드");
   ok("--fix는 심어진 체커는 되살린다",
     r.json.fixed.some((f) => /harness\/check\.mjs/.test(f)), JSON.stringify(r.json.fixed));
   ok("되살린 뒤에는 통과한다", r.code === 0, `exit ${r.code}`);
+}
+
+// ---------------------------------------------------------------------------
+// 캘리브레이션이 판정을 움직이는가
+// ---------------------------------------------------------------------------
+//
+// 여기 있는 것도 "스크립트가 무엇을 읽고 무엇을 주장하느냐"다. 다만 읽는 대상이 남의
+// 레포가 아니라 우리 자신의 calibration/이다.
+//
+// 이 절이 붙들려는 사실은 하나다. **캘리브레이션 값만 바꿔서 규칙 하나를 은퇴시킬 수
+// 있다.** 그전에는 `axis: calibrated`인 판단 규칙이 값을 한 번도 읽지 않았고, 은퇴시키는
+// 유일한 방법은 값을 지워서 1차 소스가 없는 척하는 것이었다 — 그건 거짓이다.
+//
+// 플러그인을 통째로 임시 디렉터리에 복사해서 거기서 돌린다. 레포 안의 calibration/을
+// 고쳤다 되돌리는 방식은 크래시 한 번에 레포를 더럽힌 채로 남긴다.
+console.log("캘리브레이션 -> 판정");
+{
+  const lab = mkdtempSync(join(tmpdir(), "thinkit-calibration-"));
+  const emptyTarget = join(lab, "target");
+  mkdirSync(emptyTarget, { recursive: true });
+
+  // 종료 코드를 시험하는 단언에 쓰는 타깃. 빈 디렉터리는 `claude-md.exists`가 항상 걸려서
+  // 무엇을 심든 exit 1이고, 그러면 "이것 때문에 1이 됐다"가 "원래부터 1이었다"와 구별되지
+  // 않는다. 통과하지만 아무것도 붙들지 않는 단언이 정확히 그 모양으로 있었다.
+  //
+  // 이 타깃은 손대지 않은 사본에 대해 exit 0이어야 한다. 그 대조군을 먼저 확인한다.
+  const minimalTarget = join(lab, "minimal");
+  mkdirSync(minimalTarget, { recursive: true });
+  writeFileSync(join(minimalTarget, "CLAUDE.md"), "# t\n\n## 함정\n", "utf8");
+
+  let serial = 0;
+  const pluginCopy = () => {
+    const dir = join(lab, `plugin-${++serial}`);
+    mkdirSync(dir, { recursive: true });
+    // check.mjs --mode full이 닿는 것은 이 셋뿐이다. 나머지를 복사하면 느려지기만 한다.
+    for (const d of ["scripts", "principles", "calibration"])
+      cpSync(join(root, d), join(dir, d), { recursive: true });
+    return dir;
+  };
+
+  // 캘리브레이션 값 블록만 갈아 끼운다. 산문은 그대로 둔다 — 판정에 쓰이는 것은 블록이다.
+  const editCalibration = (dir, fn) => {
+    const p = join(dir, "calibration/claude-5.md");
+    const md = readFileSync(p, "utf8");
+    const m = md.match(/```json\n([\s\S]*?)\n```/);
+    const block = JSON.parse(m[1]);
+    fn(block);
+    writeFileSync(p, md.replace(m[0], "```json\n" + JSON.stringify(block, null, 2) + "\n```"), "utf8");
+  };
+  const editRules = (dir, fn) => {
+    const p = join(dir, "principles/rules.json");
+    const rules = JSON.parse(readFileSync(p, "utf8"));
+    fn(rules);
+    writeFileSync(p, JSON.stringify(rules, null, 2) + "\n", "utf8");
+  };
+  const ruleById = (rules, id) => rules.items.find((i) => i.id === id);
+
+  const check = (dir, target = emptyTarget) => {
+    try {
+      const out = execFileSync(process.execPath,
+        [join(dir, "scripts/check.mjs"), "--mode", "full", "--target", target, "--json"],
+        // stderr를 파이프로 잡는다. 던지는 경우가 여기 검사 대상이라 기본값으로 두면
+        // 통과하는 실행이 스택 트레이스를 뱉어 실패처럼 읽힌다.
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      return { code: 0, json: JSON.parse(out) };
+    } catch (e) {
+      // 캘리브레이션 로드가 던지면 stdout이 JSON이 아니다. 그 경우는 stderr로 판정한다.
+      let json = null;
+      try { json = JSON.parse(e.stdout ?? ""); } catch { /* JSON이 아니다 */ }
+      return { code: e.status, json, stderr: e.stderr ?? "" };
+    }
+  };
+  const find = (r, id) => r.json?.findings.find((f) => f.id === id);
+
+  const CUTOFF = "review.cutoff-instruction";
+  const DUP = "instruction.duplicates-model-default";
+
+  // 대조군. 손대지 않은 사본에서 규칙은 살아 있고 error다. 이것이 없으면 아래의 모든
+  // "탈락했다"가 애초에 돌지 않는 규칙과 구별되지 않는다.
+  {
+    const base = find(check(pluginCopy()), CUTOFF);
+    ok("손대지 않은 캘리브레이션에서 규칙은 살아 있다",
+      base?.severity === "error" && !base.dropped && !base.deferred, JSON.stringify(base));
+  }
+
+  // 은퇴 증명. 값 하나를 harmful -> harmless로 바꾼다. source는 그대로 있다 — 1차 소스를
+  // 지우지 않고도 은퇴시킬 수 있다는 것이 이 검사의 전부다.
+  {
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { b.values.review_instruction_form.value.cutoff_instructions = "harmless"; });
+    const f = find(check(dir), CUTOFF);
+    ok("값만 바꾸면 규칙이 은퇴한다", f?.dropped === true && f.severity === "info", JSON.stringify(f));
+    ok("은퇴한 규칙은 이유를 말한다", /harmless/.test(f?.message ?? ""), f?.message);
+    const stillSourced = JSON.parse(
+      readFileSync(join(dir, "calibration/claude-5.md"), "utf8").match(/```json\n([\s\S]*?)\n```/)[1]);
+    ok("은퇴시키는 데 1차 소스를 지울 필요가 없었다",
+      Boolean(stillSourced.values.review_instruction_form.source), "source가 사라졌다");
+  }
+
+  // 종료 코드 대조군. 심는 것이 없으면 이 타깃은 통과한다. 이것이 없으면 아래의 모든
+  // "1이 됐다"가 "원래부터 1이었다"와 구별되지 않는다.
+  ok("손대지 않은 사본은 최소 타깃에서 통과한다", check(pluginCopy(), minimalTarget).code === 0);
+
+  // on_value에 없는 값은 조용히 통과하지 않는다. 규칙이 모르는 세대에서 아는 척 도는 것은
+  // 판정이 아니다 — machine 규칙에 구현이 없을 때와 같은 처치를 받는다.
+  {
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { b.values.review_instruction_form.value.cutoff_instructions = "누가 봐도 모르는 값"; });
+    const r = check(dir, minimalTarget);
+    const f = find(r, CUTOFF);
+    ok("매핑되지 않은 값은 error로 드러난다", f?.severity === "error" && f.unmapped === true, JSON.stringify(f));
+    ok("매핑되지 않은 값은 종료 코드에 들어간다", r.code === 1, `exit ${r.code}`);
+  }
+
+  // `on_unset`은 아무도 검증하지 않던 자리였다. 계약이 광고하는 어휘를 오타 하나로 벗어나면
+  // 조용히 "처치 없음"이 되고, 그 규칙은 탈락도 질문도 하지 않은 채 렌더되지 못한 질문을
+  // 싣고 나갔다 — `{{...}}`가 박힌 문자열을 소유자가 완성된 질문으로 받는다.
+  {
+    const dir = pluginCopy();
+    editRules(dir, (r) => { ruleById(r, DUP).on_unset = "dropp"; });
+    editCalibration(dir, (b) => { delete b.values.model_defaults.wide_axes; });
+    const r = check(dir, minimalTarget);
+    const f = find(r, DUP);
+    ok("on_unset 오타는 error로 드러난다", f?.severity === "error" && f.misdeclared === true, JSON.stringify(f));
+    ok("그리고 종료 코드에 들어간다", r.code === 1, `exit ${r.code}`);
+    ok("자리표시자가 박힌 질문은 실리지 않는다",
+      !r.json?.findings.some((x) => /\{\{/.test(x.asks ?? "")), JSON.stringify(f));
+  }
+
+  // 최후 방어선. `on_unset: keep`은 어휘에 있는 처치라 위 검증을 통과하고, 그러면 값이 없는
+  // 규칙이 판단 항목 경로로 그대로 흘러간다. 그 경로에 렌더되지 못한 질문이 실리는 것을
+  // `add`가 마지막으로 막는다 — 위쪽 경로가 하나 열려도 반쪽 질문은 나가지 않아야 한다.
+  {
+    const dir = pluginCopy();
+    editRules(dir, (r) => { ruleById(r, DUP).on_unset = "keep"; });
+    editCalibration(dir, (b) => { delete b.values.model_defaults.wide_axes; });
+    const r = check(dir, minimalTarget);
+    const f = find(r, DUP);
+    ok("렌더되지 못한 질문은 발견 대신 error가 된다",
+      f?.severity === "error" && f.unrendered === true && f.asks === undefined, JSON.stringify(f));
+    ok("그리고 종료 코드에 들어간다", r.code === 1, `exit ${r.code}`);
+  }
+
+  // `wide_axes`가 `value`에 없는 키를 부르면 로드가 던진다. 갈라짐이 조용한 것이 이유다 —
+  // `narration`을 `low`로 되돌리면서 목록에서 빼는 것을 잊으면, 감사는 나레이션이 더는 넓게
+  // 돌지 않는 세대에서 나레이션 지시가 비었다고 계속 묻는다.
+  {
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { b.values.model_defaults.wide_axes.push("존재하지_않는_축"); });
+    const r = check(dir, minimalTarget);
+    ok("value에 없는 키를 부르는 wide_axes는 던진다",
+      r.code !== 0 && /존재하지_않는_축/.test(r.stderr ?? ""), r.stderr?.slice(0, 200));
+  }
+
+  // ask 처치. 발견은 나가되 판정은 소유자에게 넘어간다.
+  //
+  // 심각도는 선언값 그대로다. 내리던 적이 있는데, 그러면 이 레포에서 가장 무거운 규칙이
+  // 보고서 맨 아래 파란 줄로 내려앉는다 — 표식은 종료 코드의 선을 보이게 할 뿐 판정을
+  // 바꾸지 않는다는 불변식이 깨진다. 종료 코드에서 빼는 일은 `deferred`가 따로 한다.
+  {
+    const dir = pluginCopy();
+    editRules(dir, (r) => { ruleById(r, CUTOFF).on_value.harmful = "ask"; });
+    const r = check(dir, minimalTarget);
+    const f = find(r, CUTOFF);
+    ok("ask는 발견을 내고 판정을 넘긴다",
+      f?.deferred === true && f.pending === true, JSON.stringify(f));
+    ok("넘긴 판정도 선언된 심각도로 나간다", f?.severity === "error", f?.severity);
+    ok("그래도 종료 코드는 가르지 않는다", r.code === 0, `exit ${r.code}`);
+  }
+
+  // on_unset: ask. 계약이 광고하던 두 처치 중 구현이 없던 쪽이다.
+  {
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { b.values.review_instruction_form.source = null; });
+    const dropDir = pluginCopy();
+    editCalibration(dropDir, (b) => { b.values.review_instruction_form.source = null; });
+    editRules(dir, (r) => { ruleById(r, CUTOFF).on_unset = "ask"; });
+    const asked = find(check(dir), CUTOFF);
+    const dropped = find(check(dropDir), CUTOFF);
+    ok("on_unset: ask는 물어본다", asked?.deferred === true && asked.severity === "error", JSON.stringify(asked));
+    ok("on_unset: drop은 여전히 탈락시킨다", dropped?.dropped === true, JSON.stringify(dropped));
+    // 이유가 세 상태를 구별한다. 항목은 파일에 멀쩡히 있고 `source`만 없는데 "항목이 없다"고
+    // 적힌 보고서를 받으면, 읽는 사람은 파일을 열어보고 혼란에 빠진다.
+    ok("unset 이유가 항목 없음과 source 없음을 구별한다",
+      /1차 소스/.test(asked?.message ?? "") && !/항목이 없다/.test(asked?.message ?? ""), asked?.message);
+  }
+
+  // 하위 호환. on_value가 없는 calibrated 규칙은 값을 읽지 않고 예전과 똑같이 돈다.
+  {
+    const dir = pluginCopy();
+    editRules(dir, (r) => {
+      const rule = ruleById(r, CUTOFF);
+      delete rule.on_value;
+      delete rule.on_value_key;
+    });
+    editCalibration(dir, (b) => { b.values.review_instruction_form.value.cutoff_instructions = "harmless"; });
+    const f = find(check(dir), CUTOFF);
+    ok("on_value가 없으면 값과 무관하게 돈다", f?.severity === "error" && !f.dropped, JSON.stringify(f));
+  }
+
+  // 자리표시자. 채울 값이 없으면 질문이 반쪽으로 나가는 대신 on_unset 경로로 떨어진다.
+  {
+    const base = find(check(pluginCopy()), DUP);
+    ok("자리표시자는 캘리브레이션에서 렌더된다",
+      /응답 길이/.test(base?.asks ?? "") && !/\{\{/.test(base?.asks ?? ""), base?.asks);
+
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { delete b.values.model_defaults.wide_axes; });
+    const f = find(check(dir), DUP);
+    ok("채울 값이 없으면 질문이 나가지 않는다", f?.dropped === true, JSON.stringify(f));
+    ok("반쪽 질문 대신 이유가 나간다", /자리표시자/.test(f?.message ?? ""), f?.message);
+  }
+
+  // 이 규칙의 은퇴 조건은 자기가 묻는 것에 달려 있다. 묻는 것은 넓게 도는 축들이므로
+  // 축 목록이 비면 탈락하고(위 절), 다른 값이 움직인다고 탈락하지 않는다.
+  //
+  // `self_verification`을 걸어 두었던 적이 있고 그것이 이 검사가 있는 이유다.
+  // `calibration/claude-5.md`의 model_defaults 절은 그 값에 의존하는 것이 인터뷰 Q3라고
+  // 적는다 — 이 규칙이 아니다. 검증 지시가 무해해진 세대에서도 응답 길이와 나레이션은
+  // 여전히 넓게 돌 수 있고, 그때 이 규칙이 탈락하면 아직 유효한 질문이 조용히 사라진다.
+  {
+    const dir = pluginCopy();
+    editCalibration(dir, (b) => { b.values.model_defaults.value.self_verification = "off"; });
+    const f = find(check(dir), DUP);
+    ok("자기가 묻지 않는 값이 움직여도 탈락하지 않는다",
+      f?.dropped !== true && f?.deferred !== true, JSON.stringify(f));
+    ok("축 목록이 남아 있으면 질문도 남는다", /응답 길이/.test(f?.asks ?? ""), f?.asks);
+  }
+
+  // 축 둘이 같은 키를 쓰면 던진다. 평탄화가 조용히 덮는 것이 문서화된 대응("새 세대는
+  // 파일 하나를 더한다")에서 나올 수 있는 상태라서, 이건 발견이 아니라 로드 실패여야 한다.
+  {
+    const dir = pluginCopy();
+    writeFileSync(join(dir, "calibration/clash.md"),
+      "# 충돌\n\n```json\n" +
+      JSON.stringify({ axis: "harness", values: { review_instruction_form: { value: "x", source: "x" } } }, null, 2) +
+      "\n```\n", "utf8");
+    const idxPath = join(dir, "calibration/index.json");
+    const idx = JSON.parse(readFileSync(idxPath, "utf8"));
+    idx.axes.harness = { default: "clash", files: { clash: "calibration/clash.md" } };
+    writeFileSync(idxPath, JSON.stringify(idx, null, 2) + "\n", "utf8");
+    const r = check(dir);
+    ok("축 간 키 충돌은 던진다", r.code !== 0 && /축 둘에서 온다/.test(r.stderr ?? ""), r.stderr?.slice(0, 200));
+  }
+
+  // --- 세대 provenance ------------------------------------------------------
+  //
+  // 매니페스트는 무엇을 심었는지는 알면서 무엇에 비추어 심었는지는 몰랐다. 그래서
+  // "기준선이 움직였다"를 발견으로 낼 수 있는 코드가 아예 없었다.
+  {
+    const built = join(lab, "built");
+    mkdirSync(join(built, "src"), { recursive: true });
+    const answers = join(built, "answers.json");
+    writeFileSync(answers, JSON.stringify({
+      architecture: "fsd", projectName: "t", oneLine: "t",
+      severity: "error", publicApi: "enforced", sliceCoupling: "isolated",
+    }));
+    execFileSync(process.execPath,
+      [join(root, "scripts/scaffold.mjs"), "react", "--target", built, "--answers", answers, "--json"],
+      { encoding: "utf8" });
+
+    const manifestPath = join(built, ".claude/harness/manifest.json");
+    const readManifest = () => JSON.parse(readFileSync(manifestPath, "utf8"));
+    const writeManifest = (m) => writeFileSync(manifestPath, JSON.stringify(m, null, 2) + "\n", "utf8");
+
+    ok("매니페스트가 세운 시점의 세대를 기록한다",
+      readManifest().generation?.model === "claude-5", JSON.stringify(readManifest().generation));
+
+    const sameGen = check(pluginCopy(), built);
+    ok("--json이 지금 판정에 쓰인 세대를 싣는다",
+      sameGen.json?.generation?.model === "claude-5", JSON.stringify(sameGen.json?.generation));
+    ok("같은 세대면 드리프트가 없다", sameGen.json?.generationDrift === null, JSON.stringify(sameGen.json?.generationDrift));
+
+    const moved = readManifest();
+    moved.generation = { ...moved.generation, model: "claude-4" };
+    writeManifest(moved);
+    // 드리프트는 발견이 아니다. `findings`에 사는 것은 레포가 고칠 수 있는 판정이고, 이것은
+    // 우리 기준선이 움직였다는 우리 쪽 사실이다 — `[planted]`·`[calibration]`과 같은 채널에
+    // 산다. 발견 배열에 있던 동안에는 세대를 옮긴 직후 모든 레포의 발견 수가 하나씩 늘었다.
+    const moveRun = check(pluginCopy(), built);
+    const drift = moveRun.json?.generationDrift;
+    ok("세대가 다르면 드리프트를 낸다", drift?.length === 1 && drift[0].axis === "model", JSON.stringify(drift));
+    ok("드리프트는 상태만 말한다",
+      drift?.[0]?.built === "claude-4" && drift?.[0]?.now === "claude-5", JSON.stringify(drift));
+    ok("드리프트는 발견 배열에 섞이지 않는다",
+      !moveRun.json?.findings.some((f) => /generation-drift/.test(f.id)),
+      JSON.stringify(moveRun.json?.findings.map((f) => f.id)));
+
+    // 지금 배포된 매니페스트는 전부 이 모양이다. 없는 것을 다른 세대로 읽으면 기존 레포
+    // 전부가 거짓 발견을 받는다.
+    const old = readManifest();
+    delete old.generation;
+    writeManifest(old);
+    ok("세대 기록이 없는 옛 매니페스트는 조용하다", check(pluginCopy(), built).json?.generationDrift === null);
+  }
+
+  if (keep) console.log(`  캘리브레이션 실험실을 남겨 둠:\n  ${lab}`);
+  else rmSync(lab, { recursive: true, force: true });
 }
 
 if (!keep && existsSync(tmp)) rmSync(tmp, { recursive: true, force: true });
