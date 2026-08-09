@@ -112,7 +112,8 @@ writes: "## 안전 경계" (비어 있지 않을 때만)
 id: Q3
 axis: calibrated
 key: verification
-calibrated_by: model_defaults.self_verification
+calibrated_by: model_defaults
+on_value_key: self_verification
 on_value:
   "on": ask          # 모델이 이미 검증한다. 레포 고유 사실만 적을 값어치가 있다
   "off": drop        # 자기 검증을 하지 않는 세대에는 이 질문을 넓힐 게 아니라 다른 질문이 필요하다

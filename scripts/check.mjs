@@ -72,8 +72,42 @@ function rulesPath() {
 }
 const rules = JSON.parse(readFileSync(rulesPath(), "utf8"));
 const findings = [];
-const add = (rule, severity, message, extra = {}) =>
-  findings.push({ id: rule.id, severity, decidable: rule.decidable, message, ...extra });
+
+// `ask` 처치를 받은 규칙이 여기 앉는다. 값이 있는 동안만 채워지고, 규칙마다 초기화된다.
+//
+// 침묵시키지 않는 이유는 `drop`과 구별해야 하기 때문이다. 판정을 소유자에게 넘긴 것과
+// 규칙이 은퇴한 것은 다른 상태이고, 둘을 같은 모양으로 내보내면 감사가 무엇을 안 했는지
+// 읽는 사람이 알 수 없다.
+//
+// 심각도는 선언값 그대로 나간다. 예전엔 info로 내렸는데, 그 처치는 얻는 것 없이 잃기만
+// 했다 — 종료 코드에서 빼는 일은 아래 `failed`의 `!f.deferred`가 이미 하고, 심각도를
+// 내리면 `review.cutoff-instruction`처럼 error로 선언된 규칙이 보고서 맨 아래 파란 줄로
+// 내려앉는다. 표식은 그 선을 보이게 할 뿐 판정을 바꾸지 않는다는 위쪽 불변식이 깨진다.
+let deferral = null;
+const add = (rule, severity, message, extra = {}) => {
+  // 최후 방어선. 자리표시자가 남은 질문은 어떤 경로로도 나가면 안 된다 — 소유자는 그것을
+  // 완성된 질문으로 알고 답한다. 위쪽 렌더 경로가 전부 막혔더라도 여기서 한 번 더 본다.
+  // 이것은 레포에 대한 판정이 아니라 우리 규칙 선언의 결함이므로, 구현 누락과 같은 모양의
+  // error를 내고 발견 대신 그것을 싣는다.
+  if (typeof extra.asks === "string" && extra.asks.includes("{{")) {
+    findings.push({
+      id: rule.id,
+      severity: "error",
+      decidable: rule.decidable,
+      message: `질문에 채우지 못한 자리표시자가 남아 있다: ${extra.asks}. 반쪽 질문은 내보내지 않았다.`,
+      unrendered: true,
+    });
+    return;
+  }
+  findings.push({
+    id: rule.id,
+    severity,
+    decidable: rule.decidable,
+    message: deferral ? `${message} 판정은 소유자에게 넘긴다: ${deferral}.` : message,
+    ...(deferral ? { deferred: true } : {}),
+    ...extra,
+  });
+};
 
 const readIf = (p) => (existsSync(join(target, p)) ? readFileSync(join(target, p), "utf8") : null);
 
@@ -209,15 +243,149 @@ if (mode === "full") {
   calibration = { cal, get };
 }
 
+// 처치 어휘. `on_value`와 `on_unset`이 같은 셋을 쓴다.
+//   keep  규칙이 그대로 돈다
+//   drop  탈락. 이유와 함께 info로 보고한다 — 안 돈 검사가 통과한 검사처럼 보이면 안 된다
+//   ask   발견은 선언된 심각도 그대로 내되 판정은 소유자에게 넘긴다 (deferred: true)
+const TREATMENTS = ["keep", "drop", "ask"];
+
+// 규칙 선언 자체의 결함. 레포에 대한 판정이 아니라 우리 파일의 결함이므로, 구현이 없는
+// 기계 규칙과 같은 처치를 받는다 — error로 드러내고 그 규칙은 돌지 않는다.
+//
+// `on_value`는 `valueTreatment`가 이미 검증하는데 `on_unset`은 아무도 보지 않았다. 계약이
+// 광고하는 어휘를 오타 하나로 벗어나면 조용히 "처치 없음"이 되고, 그 규칙은 값이 없는
+// 세대에서 탈락도 질문도 하지 않은 채 렌더되지 못한 질문을 싣고 나갔다.
+//
+// 기계 규칙에 `asks`나 `on_value`가 붙는 것도 같은 모양의 침묵이다. 기계 발견에는 질문이
+// 실리지 않으므로 `asks`는 어디로도 나가지 않고, 값이 있을 때 무엇을 보고할지는 그 구현이
+// 알고 있으므로 `on_value`가 여기서 가로채면 그 보고가 사라진다.
+function declarationError(rule) {
+  if (rule.axis === "calibrated" && !TREATMENTS.includes(rule.on_unset))
+    return `on_unset이 모르는 처치를 지목한다: ${JSON.stringify(rule.on_unset) ?? "없음"}. 처치는 ${TREATMENTS.join(", ")}뿐이다. 판정하지 않았다.`;
+  if (rule.decidable === "machine" && rule.audit?.asks !== undefined)
+    return "기계 판정으로 선언됐는데 audit.asks를 지닌다. 기계 발견에는 질문이 실리지 않으므로 이 질문은 어디로도 나가지 않는다.";
+  if (rule.decidable === "machine" && rule.on_value !== undefined)
+    return "기계 판정으로 선언됐는데 on_value를 지닌다. 값이 있을 때 무엇을 보고할지는 그 구현이 소유한다.";
+  return null;
+}
+
+// 캘리브레이션 값에서 처치를 뽑는다. `on_value_key`는 `value` 객체의 어느 하위 키를 볼지
+// 지목하고, 없으면 값 자체를 키로 쓴다.
+//
+// 매핑되지 않은 값을 조용히 통과시키지 않는다. 그렇게 하면 규칙은 자기가 모르는 세대에서
+// 자기가 아는 세대인 척 돌고, 그 판정은 근거 없이 나온 판정이다. 이 레포가 machine 규칙에
+// 구현이 없을 때 하는 것과 같은 처치를 한다 — error로 드러낸다.
+function valueTreatment(rule, calValue) {
+  const key = rule.on_value_key;
+  const label = key === undefined ? rule.calibrated_by : `${rule.calibrated_by}.${key}`;
+  const raw = key === undefined ? calValue.value : calValue.value?.[key];
+  if (raw === null || typeof raw === "object" || typeof raw === "undefined")
+    return {
+      error: `캘리브레이션이 이 규칙이 모르는 값을 준다: ${label} = ${JSON.stringify(raw) ?? "없음"}. on_value는 문자열 하나를 기대한다. 판정하지 않았다.`,
+    };
+  const treatment = rule.on_value[String(raw)];
+  if (treatment === undefined)
+    return {
+      error: `캘리브레이션이 이 규칙이 모르는 값을 준다: ${label} = ${JSON.stringify(raw)}. on_value가 아는 값은 ${Object.keys(rule.on_value).join(", ")}뿐이다. 판정하지 않았다.`,
+    };
+  if (!TREATMENTS.includes(treatment))
+    return {
+      error: `on_value가 모르는 처치를 지목한다: ${label} = ${JSON.stringify(raw)} -> "${treatment}". 처치는 ${TREATMENTS.join(", ")}뿐이다. 판정하지 않았다.`,
+    };
+  return { treatment, label, raw };
+}
+
+// asks 문장의 세대 의존 부분은 캘리브레이션에서 렌더한다. `{{키}}`는 그 값의 `value`,
+// `{{키.필드}}`는 그 항목의 다른 필드(`phrases`, `wide_axes`)를 가리킨다.
+//
+// 자리표시자를 채우지 못하면 문자열을 그대로 두고 못 채운 것을 돌려준다. 반쪽으로 나간
+// 질문은 없는 질문보다 나쁘다 — 소유자는 그것이 완성된 질문인 줄 알고 답한다. 호출부가
+// 그 경우를 unset과 같이 다룬다.
+// 정규식이 `\w`(ASCII)만 받던 적이 있다. 이 레포의 산문이 한국어라 `{{모델기본값}}` 같은
+// 키가 나오면 아예 매칭되지 않았고, 매칭되지 않은 자리표시자는 `missing`에도 오르지 못한 채
+// 원본 그대로 소유자에게 나갔다 — 탐지 경로가 없는 누출이다.
+function renderAsks(text, cal, get) {
+  const missing = [];
+  const rendered = text.replace(/\{\{([\p{L}\p{N}_.-]+)\}\}/gu, (whole, ref) => {
+    const parts = ref.split(".");
+    // 조각이 셋 이상이면 앞의 둘만 쓰고 나머지를 버리게 된다. 버려진 조각은 실패가 아니라
+    // 조용한 오답이 되고, 그건 반쪽 질문보다 나쁘다 — 완전해 보이는데 틀린 질문이다.
+    if (parts.length > 2) {
+      missing.push(`${ref} (자리표시자는 키 하나와 필드 하나만 받는다)`);
+      return whole;
+    }
+    const [key, field] = parts;
+    const entry = get(cal, key);
+    if (!entry.set) {
+      missing.push(`${ref} (${entry.reason})`);
+      return whole;
+    }
+    const v = field ? entry[field] : entry.value;
+    if (v === null || v === undefined || (Array.isArray(v) && v.length === 0)) {
+      missing.push(`${ref} (선택된 캘리브레이션의 ${key}에 ${field ?? "value"}가 없다)`);
+      return whole;
+    }
+    // `wide_axes`처럼 `value`의 키 이름을 부르는 목록은 그대로 내면 질문 한가운데에
+    // snake_case가 앉는다. 그 항목이 표시명을 지니면 그것으로 바꾼다 — 멤버십은 `value`가
+    // 소유하고 `labels`는 이름만 대므로, 둘이 갈라져도 판정은 움직이지 않는다.
+    if (Array.isArray(v)) return v.map((el) => entry.labels?.[el] ?? el).join(", ");
+    return String(v);
+  });
+  return { rendered, missing };
+}
+
 for (const rule of rules.items) {
   if (mode === "principles" && rule.axis !== "principle") continue;
+  deferral = null;
+  const misdeclared = declarationError(rule);
+  if (misdeclared) {
+    add(rule, "error", misdeclared, { misdeclared: true });
+    continue;
+  }
   let calValue = { set: false, reason: "principles 모드에서는 캘리브레이션 항목을 평가하지 않는다" };
+  let asks = rule.audit?.asks;
   if (rule.axis === "calibrated") {
     if (!calibration) continue;
     calValue = calibration.get(calibration.cal, rule.calibrated_by);
-    if (!calValue.set && rule.on_unset === "drop" && rule.decidable === "judgement") {
-      add(rule, "info", `탈락: ${calValue.reason}`, { dropped: true });
-      continue;
+
+    // 자리표시자를 못 채운 질문은 값이 없는 것과 같이 다룬다. 채울 값이 없는데도 질문을
+    // 내보내면 세대가 바뀐 자리에서 거짓 질문이 나간다.
+    let unresolved = null;
+    if (asks) {
+      const r = renderAsks(asks, calibration.cal, calibration.get);
+      if (r.missing.length) unresolved = `질문의 자리표시자를 채울 값이 없다: ${r.missing.join("; ")}`;
+      else asks = r.rendered;
+    }
+
+    // 값이 없는 경로. `on_unset`이 정하고, 계약이 광고하는 두 처치를 모두 구현한다.
+    // 기계 규칙은 여기로 떨어지지 않는다 — 값이 없을 때 무엇을 보고할지는 그 구현이
+    // 알고 있고(claude-md.budget은 토큰 수를 여전히 보고한다), 여기서 가로채면 그
+    // 보고가 사라진다.
+    if (!calValue.set || unresolved) {
+      const reason = calValue.set ? unresolved : calValue.reason;
+      if (rule.decidable === "judgement" && rule.on_unset === "drop") {
+        add(rule, "info", `탈락: ${reason}`, { dropped: true });
+        continue;
+      }
+      if (rule.decidable === "judgement" && rule.on_unset === "ask") deferral = reason;
+    } else if (rule.on_value && rule.decidable === "judgement") {
+      // 값이 있는 경로. `on_value`가 없는 규칙은 여기 들어오지 않고 예전과 똑같이 돈다.
+      //
+      // `judgement` 가드는 위 unset 분기와 같은 불변식이다 — 기계 규칙의 보고는 그 구현이
+      // 소유하고 여기서 가로채지 않는다. 기계 규칙에 `on_value`가 붙는 것 자체는
+      // `declarationError`가 error로 드러내므로, 이 가드가 삼키는 선언은 없다.
+      const v = valueTreatment(rule, calValue);
+      if (v.error) {
+        add(rule, "error", v.error, { unmapped: true });
+        continue;
+      }
+      if (v.treatment === "drop") {
+        add(rule, "info", `탈락: 캘리브레이션이 ${v.label} = ${JSON.stringify(v.raw)}라고 답한다. 이 값에서 이 규칙은 돌지 않는다.`, {
+          dropped: true,
+        });
+        continue;
+      }
+      if (v.treatment === "ask") deferral = `캘리브레이션이 ${v.label} = ${JSON.stringify(v.raw)}라고 답한다`;
     }
   }
   if (rule.decidable === "machine") {
@@ -226,6 +394,9 @@ for (const rule of rules.items) {
     // 레포에서 감사하는 바로 그 실패 양식이다. 돌지 않은 검사가 통과한 검사처럼
     // 보이면 안 된다.
     if (!machine[rule.id]) {
+      // 구현 누락은 레포에 대한 판정이 아니라 체커 자신의 결함이다. 소유자에게 넘길
+      // 판정이 없으므로 ask 처치로 낮추지 않는다.
+      deferral = null;
       add(rule, "error", `기계 판정으로 선언됐는데 "${rule.id}"에 대한 검사가 구현되어 있지 않다. 돌지 않았다.`, { unimplemented: true });
       continue;
     }
@@ -233,9 +404,43 @@ for (const rule of rules.items) {
   } else {
     add(rule, rule.severity, `판단 항목. 루브릭: ${rule.rubric}`, {
       pending: true,
-      asks: rule.audit?.asks,
+      asks,
       phrases: calValue.set ? calValue.phrases : undefined,
     });
+  }
+}
+deferral = null;
+
+// 지금 판정에 쓰인 세대. 축 이름 -> 세대 이름이고, `--mode principles`에는 없다 —
+// 그 모드는 캘리브레이션을 아예 읽지 않으므로 세대를 댈 수 없고, 없는 것을 적으면
+// 심어진 사본의 출력이 자기가 하지 않은 판정을 주장하게 된다.
+const generation = calibration ? calibration.cal._selected : null;
+
+// 세운 시점의 세대와 지금 세대를 맞춰 본다. 상태만 보고한다 — 무엇을 고칠지는 나머지
+// 발견들이 이미 말하고, 여기서 지시를 더하면 같은 말이 두 곳에서 나온다.
+//
+// 세대 기록이 없는 매니페스트는 unknown이고 아무것도 내지 않는다. 지금 배포된 매니페스트는
+// 전부 그 상태이고, 없는 것을 "다른 세대"로 읽으면 기존 레포 전부가 거짓 발견을 받는다.
+//
+// 발견이 아니다. `findings`에 사는 것은 레포가 자기 하네스에 대해 고칠 수 있는 판정이고,
+// 이것은 우리 기준선이 움직였다는 우리 쪽 사실이다 — 심어진 파일 상태를 [planted]로,
+// 세대를 [calibration]으로 내보내는 것과 같은 채널에 앉는다. 한동안 `findings`에 있었는데,
+// 그러면 `rules.json`에 없는 id가 발견 배열에 섞이고 세대를 옮긴 직후 모든 레포의 발견 수가
+// 하나씩 늘었다 — 레포가 고칠 수 없는 것 하나가 고칠 것들의 개수에 실린 것이다.
+//
+// 축은 양쪽의 합집합에서 돈다. 지금 index.json에 있는 축에서만 출발하면, 매니페스트에
+// 기록된 축이 나중에 index.json에서 사라졌을 때 그 축의 드리프트를 영영 보고하지 않는다.
+let generationDrift = null;
+if (mode === "full" && generation) {
+  const raw = readIf(".claude/harness/manifest.json");
+  const parsed = raw === null ? null : parseJson(raw, ".claude/harness/manifest.json");
+  const built = parsed?.ok ? parsed.value.generation : null;
+  if (built && typeof built === "object") {
+    const axes = new Set([...Object.keys(generation), ...Object.keys(built)]);
+    const moved = [...axes]
+      .filter((axis) => built[axis] && built[axis] !== generation[axis])
+      .map((axis) => ({ axis, built: built[axis], now: generation[axis] ?? null }));
+    if (moved.length) generationDrift = moved;
   }
 }
 
@@ -414,11 +619,15 @@ findings.sort((a, b) => SEV[a.severity] - SEV[b.severity]);
 // 아니고, 처치는 재생성이다.
 const PLANTED_FAILS = new Set(["missing", "unreadable"]);
 const plantedFailed = (planted ?? []).filter((p) => PLANTED_FAILS.has(p.state));
-const failed = findings.some((f) => f.severity === "error" && !f.pending && !f.dropped) || plantedFailed.length > 0;
+// `!f.deferred`는 명시적이다. 우리가 내리지 않은 판정이 종료 코드를 가르면 안 되는데,
+// 오늘 deferral에 닿는 규칙이 전부 judgement라 `!f.pending`이 우연히 그것을 덮고 있었다.
+// 기계 규칙이 그 처치를 받게 되는 날 우연은 끊긴다.
+const failed =
+  findings.some((f) => f.severity === "error" && !f.pending && !f.dropped && !f.deferred) || plantedFailed.length > 0;
 
 if (json) {
   console.log(
-    JSON.stringify({ mode, target, findings, planted, enforcement, fixed: fix ? fixed : undefined, notes: fix ? notes : undefined }, null, 2),
+    JSON.stringify({ mode, target, generation, generationDrift, findings, planted, enforcement, fixed: fix ? fixed : undefined, notes: fix ? notes : undefined }, null, 2),
   );
 } else {
   for (const f of findings) console.log(`${MARK[f.severity]} [${f.severity}] ${f.id}: ${f.message}`);
@@ -428,6 +637,15 @@ if (json) {
   if (enforcement)
     for (const [key, c] of Object.entries(enforcement.checks))
       console.log(`[enforced] ${key}: ${c.state}${c.where ? ` (${c.where.join(", ")})` : ""}${c.why ? ` - ${c.why}` : ""}`);
+  // 어느 세대로 판정했는지. 발견 목록이 세대에 따라 달라지므로, 적지 않으면 같은 레포의
+  // 두 보고서가 왜 다른지 읽는 사람이 알 수 없다.
+  if (generation)
+    for (const [axis, pick] of Object.entries(generation)) console.log(`[calibration] ${axis}: ${pick}`);
+  // 드리프트도 같은 채널이다. 세대 줄 바로 옆에 있어야 "지금 무엇으로 판정했나"와 "무엇에
+  // 비추어 세워졌나"를 한자리에서 읽는다.
+  if (generationDrift)
+    for (const d of generationDrift)
+      console.log(`[calibration] drift: ${d.axis} — 세운 시점 ${d.built}, 지금 ${d.now ?? "그 축이 기준에 없다"}`);
   for (const f of fixed) console.log(`[fixed] ${f}`);
   for (const n of notes) console.log(`[note] ${n}`);
   console.log(`\n발견 ${findings.length}건 (판단이 필요한 것 ${findings.filter((f) => f.pending).length}건).`);

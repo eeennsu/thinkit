@@ -1,6 +1,6 @@
 ---
 name: harness-audit
-description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에이전트 지시 — 를 검토해 충돌, repo-visible 채움글, 도구가 소유해야 할 규칙, 모델이 이미 하는 일을 되풀이하는 지시를 찾을 때 쓴다.
+description: 기존 레포의 하네스 — CLAUDE.md, 스킬, 레퍼런스, 에이전트 지시 — 를 검토해 충돌, repo-visible 채움글, 도구가 소유해야 할 규칙, 모델이 이미 하는 일을 되풀이하는 지시를 찾을 때 쓴다. Use this to audit an existing repo's harness — CLAUDE.md, skills, references, agent instructions — for conflicts, repo-visible filler, rules that belong to tools, and instructions that repeat what the model already does by default.
 ---
 
 # 하네스 감사
@@ -152,11 +152,16 @@ bootstrap이 레포의 몫으로 선언한 파일이다.
 | `tooling.enforceable-rule-in-doc` | 도구가 소유할 수 있는 규칙이 문서에 남아 있을 때 |
 | `skill.without-repo-specific-content` | 스킬에 이 레포 고유의 것이 없을 때 |
 | `architecture.boundary-convention-unenforced` | 경계 규약이 있는지, 무엇이 그것을 강제하는지 읽어서 갈리지 않을 때 |
-| `instruction.duplicates-model-default` | 기본값이 반대인 축에 지시가 비어 있을 때 |
+| `instruction.duplicates-model-default` | 기본값이 넓게 도는 축 중에 이 하네스가 아직 말하지 않은 것이 있을 때 |
 | `review.cutoff-instruction` | 리뷰 보고를 잘라내라는 줄이 있을 때 |
 
-뒤의 둘은 `axis: calibrated`에 `on_unset: drop`이다. 캘리브레이션이 그 값을 모르면 규칙
-자체가 떨어지므로 질문도 뜨지 않는다. 정적으로는 일곱이고 한 번 도는 데 뜨는 것은 다섯일 수 있다.
+뒤의 둘은 `axis: calibrated`다. 캘리브레이션에 따라 질문이 뜨거나, 뜨지 않거나, 뜨되 판정이
+소유자에게 넘어간다 — 정확히 어느 값에서 어느 쪽인지는 `principles/rules.json`의
+`on_unset`·`on_value`가 정하고, 그 조건을 여기서 다시 세지 않는다.
+
+발견에 `deferred: true`가 붙어 있으면 질문은 그대로 띄우되, 이 발견에 대한 판정을 이번엔
+감사가 내리지 않고 소유자의 답이 대신한다는 것을 밝히고 묻는다 — 일반 `pending` 발견과
+달리 답을 받은 뒤에도 감사가 따로 옳고 그름을 판단하지 않는다.
 
 `architecture.boundary-convention-unenforced`의 답은 **받아 적지 않는다.** 아래 「답을 받으면」이
 소유하는 것은 산문이고, 경계 규약은 산문이 아니라 설정이 소유한다. 감사는 상태를 보고하고
