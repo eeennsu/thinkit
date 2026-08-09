@@ -34,6 +34,9 @@ export default defineConfig({
         root: { label: "한국어", lang: "ko" },
       },
       customCss: ["./src/styles/custom.css"],
+      // 푸터만 감싼다. 라이선스는 한 페이지의 내용이 아니라 사이트 전체에 대한 사실이라
+      // 모든 페이지에 나가야 하고, 랜딩 본문에 적으면 랜딩을 안 거친 독자에게는 없는 것이 된다.
+      components: { Footer: "./src/components/Footer.astro" },
       // 가로로 넘치는 영역에 표시를 다는 일은 CSS가 할 수 없다 — 넘쳤는지를 CSS는 모른다.
       // 그리고 안 넘치는 것까지 표시를 달면 그 표시는 아무것도 뜻하지 않게 된다. 그래서 재고
       // 단다. 코드 블록과 표 두 종류가 같은 이유로 넘치므로 한 곳에서 본다 — 두 곳에 적으면
