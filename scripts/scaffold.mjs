@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { render } from "./lib/render.mjs";
 import { loadProfile, listStacks } from "./lib/profile.mjs";
 import { loadModule, listModules } from "./lib/module.mjs";
+import { loadCalibration } from "./lib/calibration.mjs";
 import { plantedFiles, sha, ownedUnchanged } from "./lib/planted.mjs";
 import { readAlias } from "./lib/alias.mjs";
 import { buildElements, buildPolicies, counts, resolveOptions } from "./layer-boundaries.mjs";
@@ -308,9 +309,16 @@ for (const { path: rel, content } of plant.files) putOwned(rel, content);
 const ownsProse = manifestFiles.some((f) => f.path === "AGENTS.md");
 const boundariesDropped = Boolean(answers.safetyBoundaries?.length) && !ownsProse;
 
+// 어느 세대 기준으로 세웠는지. 심는 것은 principle 축뿐이지만, 인터뷰 질문과 판정은
+// 그때의 캘리브레이션을 거쳐 나왔다. 기록하지 않으면 "기준선이 움직였다"를 나중에
+// 발견으로 낼 수 있는 코드 자체가 없다 — 매니페스트는 무엇을 심었는지만 알고 무엇에
+// 비추어 심었는지는 모르는 상태였다.
+const generation = loadCalibration(root)._selected;
+
 put(".claude/harness/manifest.json", JSON.stringify({
   version: plant.version,
   stack,
+  generation,
   declared: { safetyBoundaries: Boolean(answers.safetyBoundaries?.length) && ownsProse },
   // 모듈 이름이 먼저다. 나머지 키는 그 모듈의 변형이고, 어느 모듈의 변형인지 모르면
   // 보고서는 값을 읽고도 무엇을 세는지 알 수 없다.
